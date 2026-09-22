@@ -5,32 +5,32 @@ ERD LINK:
 https://lucid.app/lucidchart/6808b9db-d371-4f18-93a9-789253df5f46/edit?invitationId=inv_4b878275-3296-424b-a7f3-6db856e18889&page=0_0#
 
 
-Chapter 1: Introduction 3
- 1.1 Background of the Study 3 - Vincent
- 1.2 Statement of the Problem 4  - Brann
- 1.3 Objectives of the Study 4   - Brann
- 1.4 Significance of the Study 5
- 1.5 Scope and Limitations 5
+Chapter 1: Introduction 
+ 1.1 Background of the Study     - Vincent
+ 1.2 Statement of the Problem    - Brann
+ 1.3 Objectives of the Study     - Brann
+ 1.4 Significance of the Study   - 
+ 1.5 Scope and Limitations       -
 
-Chapter 2: Review of Related Literature and Methodology 6
- 2.1 Related Literature and Studies 6
- 2.2 Theoretical / Conceptual Framework 7
- 2.3 Development Methodology 7
- 2.4 System Requirements 8
+Chapter 2: Review of Related Literature and Methodology 
+ 2.1 Related Literature and Studies      - 
+ 2.2 Theoretical / Conceptual Framework  - 
+ 2.3 Development Methodology             - 
+ 2.4 System Requirements                 -
 
-Chapter 3: System Design and Database Design 9
- 3.1 System Architecture Overview 9
- 3.2 Entity-Relationship Diagram (ERD) 10
- 3.3 Data Dictionary 12
- 3.4 Sample Database Schema (SQL) 13
+Chapter 3: System Design and Database Design 
+ 3.1 System Architecture Overview       - 
+ 3.2 Entity-Relationship Diagram (ERD)  -
+ 3.3 Data Dictionary                    -
+ 3.4 Sample Database Schema (SQL)       -
 
-Chapter 4: System Modules and Screenshots 14
- 4.1 Overview of System Modules 14
- 4.2 Login Module 15
- 4.3 Dashboard Module 16
- 4.4 Product Management Module 17
- 4.5 Stock In Module 18
- 4.6 Stock Out Module 19
- 4.7 Supplier Management Module 20
- 4.8 Reports and Analytics Module 21
- 4.9 User Management Module 22
+Chapter 4: System Modules and Screenshots
+ 4.1 Overview of System Modules   -
+ 4.2 Login Module                 -
+ 4.3 Dashboard Module             -
+ 4.4 Product Management Module    -
+ 4.5 Stock In Module              -
+ 4.6 Stock Out Module             -
+ 4.7 Supplier Management Module   -
+ 4.8 Reports and Analytics Module -
+ 4.9 User Management Module       -
