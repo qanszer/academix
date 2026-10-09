@@ -1,0 +1,24 @@
+<?php
+$me=['id'=>'2021-00123','name'=>'Juan Dela Cruz','email'=>'jua***@univ.edu.ph','prog'=>'BS Computer Science','yr'=>'3rd Year','st'=>'Regular'];
+$docs=[['Good Moral Certificate',150,0],['Transcript of Records',300,1],['True Copy of Grades',100,0],['Scholarship-related document',0,1],['Other',0,0]];
+$S=['Submitted','Under Review','Needs Correction','Processing','Approved / Cleared','Ready for Release','Completed','Rejected','Cancelled'];
+$k=['id','who','sid','doc','date','st','dv','pay','rm'];
+$R=array_map(fn($r)=>array_combine($k,$r),[
+['AX-1048','Juan Dela Cruz','2021-00123','Transcript of Records','Oct 08, 2026','Under Review','Not Applicable','Unpaid',''],
+['AX-1042','Juan Dela Cruz','2021-00123','Good Moral Certificate','Oct 06, 2026','Needs Correction','Not Applicable','Unpaid','Please upload a clearer copy of your valid ID.'],
+['AX-1031','Juan Dela Cruz','2021-00123','True Copy of Grades','Oct 01, 2026','Ready for Release','Ready for Pickup','Paid','Pick up at the Registrar window, 8 AM to 4 PM.'],
+['AX-1007','Juan Dela Cruz','2021-00123','Scholarship-related document','Sep 20, 2026','Completed','Picked Up','Waived',''],
+['AX-1050','Ana Reyes','2020-00871','Transcript of Records','Oct 09, 2026','Submitted','Not Applicable','Unpaid',''],
+['AX-1049','Carlo Mendoza','2022-01544','Good Moral Certificate','Oct 08, 2026','Processing','Not Applicable','Paid',''],
+['AX-1045','Bea Navarro','2019-00322','Other','Oct 07, 2026','Approved / Cleared','For Pickup','Paid',''],
+['AX-1039','Liza Tan','2021-00408','True Copy of Grades','Oct 03, 2026','Rejected','Not Applicable','Unpaid','Outstanding balance at the Cashier.']]);
+$E=[['Maria Santos','EMP-0101','Registrar','m.santos@univ.edu.ph','Today, 8:12 AM',1],['Paolo Cruz','EMP-0102','Records','p.cruz@univ.edu.ph','Yesterday',1],['Grace Lim','EMP-0103','Cashier','g.lim@univ.edu.ph','Oct 05, 2026',1],['Ramon Diaz','EMP-0104','Registrar','r.diaz@univ.edu.ph','Sep 28, 2026',0]];
+$m=array_values(array_filter($R,fn($r)=>$r['sid']==$me['id']));
+function pill($s){$c=['Needs Correction'=>'f','Ready for Release'=>'f','Ready for Pickup'=>'f','Unpaid'=>'f','Completed'=>'m','Rejected'=>'m x','Cancelled'=>'m x','Not Applicable'=>'m','Picked Up'=>'m','Delivered'=>'m','Paid'=>'m'][$s]??'';return "<span class='p $c'>$s</span>";}
+function ini($s){preg_match_all('/\b(?!of\b)\w/i',$s,$x);return strtoupper(implode('',array_slice($x[0],0,2)));}
+function ic($n){$p=['home'=>'<path d="M3 11l9-8 9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>','edit'=>'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>','list'=>'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>','link'=>'<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>','users'=>'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>','sliders'=>'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>','out'=>'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>','bell'=>'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>','search'=>'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>','menu'=>'<path d="M3 6h18M3 12h18M3 18h18"/>','moon'=>'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>','l'=>'<path d="M15 18l-6-6 6-6"/>','r'=>'<path d="M9 18l6-6-6-6"/>'][$n];return '<svg viewBox="0 0 24 24" width=22 height=22 fill=none stroke=currentColor stroke-width=1.9 stroke-linecap=round stroke-linejoin=round>'.$p.'</svg>';}
+function seg(){echo '<div class=seg><button class=on data-f="">All</button><button data-f="Submitted,Under Review,Needs Correction,Processing,Approved / Cleared">Active</button><button data-f="Ready for Release">Ready</button><button data-f="Completed,Rejected,Cancelled">Closed</button></div>';}
+function lst($L,$s=0){echo '<div class=ls>';foreach($L as $r){$j=htmlspecialchars(json_encode($r),ENT_QUOTES);$u=in_array($r['st'],$s?['Submitted']:['Needs Correction','Ready for Release']);echo "<div class=li data-r='$j'><div class=l1><b>".($u?'<span class=dot></span>':'').($s?$r['who']:$r['doc'])."</b><small class=mu>{$r['date']}</small></div><div class=l1><span class=mu>".($s?$r['doc']:$r['id'])."</span><span data-k=st>".pill($r['st'])."</span></div></div>";}echo '</div>';}
+function md($L,$s=0){echo '<div class=md><div class="pn lp"><div class=sx>'.ic('search').'<input id=q placeholder="Search by document, ID or date"></div>';seg();lst($L,$s);echo '<div class=lf><span id=cnt></span><span>'.ic('l').ic('r').'</span></div></div><div class=dp id=dt></div></div>';}
+function nm($s){return "<span class=nm><span class=av>".ini($s)."</span><b>$s</b></span>";}
+function row($c,$a,$h=0){echo "<div class='tr".($h?' h':'')."' style='--c:$c'>";foreach($a as $x)echo "<span>$x</span>";echo '</div>';}
