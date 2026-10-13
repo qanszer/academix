@@ -1,240 +1,697 @@
-const $ = (s) => document.querySelector(s),
-    $$ = (s) => [...document.querySelectorAll(s)],
-    H = document.documentElement,
-    B = document.body.dataset.role;
-const toast = (m) => {
-    const t = $("#ts");
-    if (!t) return;
-    t.textContent = m;
-    t.classList.add("o");
-    setTimeout(() => t.classList.remove("o"), 2200);
-};
-$("#th") &&
-    ($("#th").onclick = () => {
-        H.dataset.t = localStorage.t = H.dataset.t == "dark" ? "light" : "dark";
-    });
-$("#cl") &&
-    ($("#cl").onclick = () =>
-        (localStorage.c = H.classList.toggle("col") ? 1 : 0));
-const ID = { student: "2021-00123", staff: "EMP-0101", admin: "ADMIN-01" };
-$$("[name=role]").forEach(
-    (r) => (r.onchange = () => ($("#uid").value = ID[r.value] || "")),
-);
-$$("[data-go]").forEach(
-    (b) =>
-    (b.onclick = (e) => {
-        e.preventDefault();
-        const n = b.dataset.go;
-        if (n == "done") {
-            toast("Account activated");
-            return setTimeout(() => (location = "index.php"), 1000);
-        }
-        $$(".stp").forEach((s) => (s.hidden = s.id != "s" + n));
-    }),
-);
-$$(".sw").forEach((s) => (s.onchange = () => toast("Saved")));
-$$("[data-toast]").forEach((b) => (b.onclick = () => toast(b.dataset.toast)));
-const tc = $("#tc");
-if (tc) {
-    const run = (b, m, f) =>
-    (b.onclick = () => {
-        $("#cs").textContent = "Working...";
-        setTimeout(() => {
-            $("#cs").textContent = "Connected";
-            f();
-            toast(m);
-        }, 900);
-    });
-    run(
-        tc,
-        "Connection OK",
-        () => ($("#cm").textContent = ((30 + Math.random() * 40) | 0) + " ms"),
-    );
-    run(
-        $("#sy"),
-        "Sync complete",
-        () => ($("#ls").textContent = "Last sync: just now"),
-    );
-}
-const dt = $("#dt");
-if (dt && $("#fi")) {
-    const u = () => {
-        const o = dt.selectedOptions[0];
-        $("#ot").hidden = o.text != "Other";
-        $("#up").hidden = o.dataset.u != 1;
-        $("#nu").hidden = o.dataset.u == 1;
-        $("#fee").textContent = o.dataset.f > 0 ? "₱" + o.dataset.f : "No fee";
-    };
-    dt.onchange = u;
-    u();
-    $("#fi").onchange = (e) =>
-        ($("#fl").textContent = [...e.target.files].map((f) => f.name).join(", "));
-    $("#rf").onsubmit = (e) => {
-        e.preventDefault();
-        toast("Request submitted");
-        setTimeout(() => (location = "history.php"), 1000);
-    };
-}
-const FL = [
-    "Submitted",
-    "Under Review",
-    "Processing",
-    "Approved / Cleared",
-    "Ready for Release",
-    "Completed",
+const THEME_STORAGE_KEY = "theme";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "sidebarCollapsed";
+
+const TOAST_DURATION_MS = 2200;
+const REDIRECT_DELAY_MS = 1000;
+const SIMULATED_NETWORK_DELAY_MS = 900;
+const MIN_LATENCY_MS = 30;
+const LATENCY_RANGE_MS = 40;
+
+const ROLE = Object.freeze({
+    STUDENT: "student",
+    STAFF: "staff",
+});
+
+const STATUS = Object.freeze({
+    SUBMITTED: "Submitted",
+    UNDER_REVIEW: "Under Review",
+    NEEDS_CORRECTION: "Needs Correction",
+    PROCESSING: "Processing",
+    APPROVED_CLEARED: "Approved / Cleared",
+    READY_FOR_RELEASE: "Ready for Release",
+    COMPLETED: "Completed",
+    REJECTED: "Rejected",
+    CANCELLED: "Cancelled",
+});
+
+const RELEASE_STATUS = Object.freeze({
+    NOT_APPLICABLE: "Not Applicable",
+    FOR_PICKUP: "For Pickup",
+    READY_FOR_PICKUP: "Ready for Pickup",
+    FOR_DELIVERY: "For Delivery",
+    IN_TRANSIT: "In Transit",
+    DELIVERED: "Delivered",
+    PICKED_UP: "Picked Up",
+});
+
+const PAYMENT_STATUS = Object.freeze({
+    UNPAID: "Unpaid",
+    PAID: "Paid",
+    WAIVED: "Waived",
+});
+
+const REQUEST_PROGRESS_STEPS = [
+    STATUS.SUBMITTED,
+    STATUS.UNDER_REVIEW,
+    STATUS.PROCESSING,
+    STATUS.APPROVED_CLEARED,
+    STATUS.READY_FOR_RELEASE,
+    STATUS.COMPLETED,
 ];
-const T = {
-    Submitted: ["Under Review"],
-    "Under Review": ["Processing", "Needs Correction", "Rejected"],
-    "Needs Correction": ["Under Review"],
-    Processing: ["Approved / Cleared"],
-    "Approved / Cleared": ["Ready for Release"],
-    "Ready for Release": ["Completed"],
+
+const ALLOWED_STATUS_TRANSITIONS = {
+    [STATUS.SUBMITTED]: [STATUS.UNDER_REVIEW],
+    [STATUS.UNDER_REVIEW]: [
+        STATUS.PROCESSING,
+        STATUS.NEEDS_CORRECTION,
+        STATUS.REJECTED,
+    ],
+    [STATUS.NEEDS_CORRECTION]: [STATUS.UNDER_REVIEW],
+    [STATUS.PROCESSING]: [STATUS.APPROVED_CLEARED],
+    [STATUS.APPROVED_CLEARED]: [STATUS.READY_FOR_RELEASE],
+    [STATUS.READY_FOR_RELEASE]: [STATUS.COMPLETED],
 };
-const PF = {
-    "Needs Correction": "f",
-    "Ready for Release": "f",
-    "Ready for Pickup": "f",
-    Unpaid: "f",
-    Completed: "m",
-    Rejected: "m x",
-    Cancelled: "m x",
-    "Not Applicable": "m",
-    "Picked Up": "m",
-    Delivered: "m",
-    Paid: "m",
+
+const TERMINATED_STATUSES = [STATUS.REJECTED, STATUS.CANCELLED];
+
+const PICKUP_PENDING_STATUSES = [
+    RELEASE_STATUS.FOR_PICKUP,
+    RELEASE_STATUS.READY_FOR_PICKUP,
+];
+
+const STATUS_PILL_CLASSES = {
+    [STATUS.NEEDS_CORRECTION]: "status-pill-attention",
+    [STATUS.READY_FOR_RELEASE]: "status-pill-attention",
+    [RELEASE_STATUS.READY_FOR_PICKUP]: "status-pill-attention",
+    [PAYMENT_STATUS.UNPAID]: "status-pill-attention",
+    [STATUS.COMPLETED]: "status-pill-muted",
+    [STATUS.REJECTED]: "status-pill-muted status-pill-terminated",
+    [STATUS.CANCELLED]: "status-pill-muted status-pill-terminated",
+    [RELEASE_STATUS.NOT_APPLICABLE]: "status-pill-muted",
+    [RELEASE_STATUS.PICKED_UP]: "status-pill-muted",
+    [RELEASE_STATUS.DELIVERED]: "status-pill-muted",
+    [PAYMENT_STATUS.PAID]: "status-pill-muted",
 };
-const pl = (s) => `<span class="p ${PF[s] || ""}">${s}</span>`;
-const opts = (a, v) =>
-    a.map((x) => `<option ${x == v ? "selected" : ""}>${x}`).join("");
-const ini = (s) =>
-    (s.match(/\b(?!of\b)\w/gi) || []).slice(0, 2).join("").toUpperCase();
-const PU = ["Employment", "Scholarship", "Board exam", "Transfer"];
-const sv = (p) =>
-    `<svg viewBox="0 0 24 24" width=18 height=18 fill=none stroke=currentColor stroke-width=1.9 stroke-linecap=round stroke-linejoin=round>${p}</svg>`;
-const CL = sv(
-    '<path d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/>',
-),
-    SD = sv('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>');
-let cur, row;
-const ck = (t, d) =>
-    `<span class="chip ${d ? "" : "m"}">${d ? "✓" : "○"} ${t}</span>`;
-const ctl =
-    () => `<div class=ct3><label>Blocking issue<select class=in id=hd><option value="">None${opts(["Outstanding balance", "Pending clearance", "Unresolved violation", "Missing requirement"])}</select></label>
-<label>Payment<select class=in onchange="cur.pay=this.value;sync()">${opts(["Unpaid", "Paid", "Waived"], cur.pay)}</select></label>
-<label>Release<select class=in onchange="cur.dv=this.value;sync()">${opts(["Not Applicable", "For Pickup", "Ready for Pickup", "For Delivery", "In Transit", "Delivered", "Picked Up"], cur.dv)}</select></label></div>`;
-function thread() {
-    const r = cur,
-        s = B == "staff",
-        i = r.st == "Needs Correction" ? 1 : FL.indexOf(r.st);
-    const bb = (me, t, w) =>
-        `<div class="bw ${me ? "me" : ""}"><small>${w}</small><div class=bb>${t}</div></div>`;
-    let h = bb(
-        !s,
-        `Hello, I would like to request my ${r.doc}. Purpose: ${PU[r.id.slice(3) % 4]}. I attached my request letter and valid ID.`,
-        (s ? r.who : "You") + ", " + r.date,
-    );
-    h += FL.slice(1, i + 1)
-        .map((x) => `<div class=ev>${x}</div>`)
-        .join("");
-    if (/Rejected|Cancelled/.test(r.st)) h += `<div class=ev>${r.st}</div>`;
-    if (r.rm) h += bb(s, r.rm, s ? "You" : "Registrar staff");
-    (r.m || []).forEach(
-        (m) =>
-        (h += bb(
-            m.s == B,
-            m.t,
-            m.s == B ? "You" : s ? r.who : "Registrar staff",
-        )),
-    );
-    return h;
+
+const BLOCKING_ISSUES = [
+    "Outstanding balance",
+    "Pending clearance",
+    "Unresolved violation",
+    "Missing requirement",
+];
+
+const REQUEST_PURPOSES = [
+    "Employment",
+    "Scholarship",
+    "Board exam",
+    "Transfer",
+];
+
+const OTHER_DOCUMENT_TYPE = "Other";
+const REGISTRAR_STAFF_LABEL = "Registrar staff";
+const ATTACHED_FILES_LABEL = "2 files";
+const DEMO_STUDENT_PROGRAM = "BS Computer Science, 3rd Year";
+
+const rootElement = document.documentElement;
+const userRole = document.body.dataset.role;
+const isStaffView = userRole === ROLE.STAFF;
+
+const selectOne = (selector) => document.querySelector(selector);
+const selectAll = (selector) => [...document.querySelectorAll(selector)];
+
+const createIcon = (paths) =>
+    `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" ` +
+    `stroke="currentColor" stroke-width="1.9" stroke-linecap="round" ` +
+    `stroke-linejoin="round">${paths}</svg>`;
+
+const PAPERCLIP_ICON = createIcon(
+    '<path d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9' +
+        'a2 2 0 0 1-3-3l8-8"/>',
+);
+const SEND_ICON = createIcon('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>');
+
+function getInitials(text) {
+    // Skips the word "of" so "Transcript of Records" gives "TR", not "TO".
+    const wordInitials = text.match(/\b(?!of\b)\w/gi) || [];
+    return wordInitials.slice(0, 2).join("").toUpperCase();
 }
-function draw() {
-    const r = cur,
-        s = B == "staff",
-        a = s
-            ? (T[r.st] || [])
-                .map(
-                    (x) =>
-                        `<button class="bt g" onclick="set('${x}')">${x == "Under Review" && r.st == "Submitted" ? "Start review" : x}</button>`,
-                )
-                .join("")
-            : r.st == "Submitted"
-                ? `<button class="bt g" onclick="set('Cancelled')">Cancel request</button>`
-                : "";
-    $("#dt").innerHTML =
-        `<div class=dc><div class=dh><span class=av>${ini(s ? r.who : r.doc)}</span><div><b>${r.doc}</b><div class=mu>${s ? r.who + ", " + r.sid + ", BS Computer Science, 3rd Year" : r.id + ", requested " + r.date}</div></div><span class=sp></span>${pl(r.st)}</div>
-<div class=pr><span class=chip>${CL} 2 files</span>${ck("Request letter", 1)}${ck("Valid ID", 1)}${ck("Original form, in person", r.st != "Submitted")}</div>
-${s ? ctl() : `<div class=pr><span class=mu>Release</span>${pl(r.dv)}<span class=mu>Payment</span>${pl(r.pay)}</div>`}</div>
-<div class=th>${thread()}</div>
-<div class=cm><textarea id=rm rows=2 placeholder="${s ? "Write a remark to the student" : "Write a message to the registrar"}"></textarea><div class=cf><button class="bt g" onclick="toast('File picker opens here')">${CL} Upload</button><span class=sp></span>${a}<button class=bt onclick=send()>Send ${SD}</button></div></div>`;
-    const t = $(".th");
-    t.scrollTop = t.scrollHeight;
+
+function renderStatusPill(label) {
+    const modifierClasses = STATUS_PILL_CLASSES[label] || "";
+    return `<span class="status-pill ${modifierClasses}">${label}</span>`;
 }
-function sync() {
-    row.dataset.r = JSON.stringify(cur);
-    const e = row.querySelector("[data-k=st]");
-    if (e) e.innerHTML = pl(cur.st);
+
+function showToast(message) {
+    const toast = selectOne("#toast");
+    if (!toast) return;
+
+    toast.textContent = message;
+    toast.classList.add("visible");
+    setTimeout(() => toast.classList.remove("visible"), TOAST_DURATION_MS);
 }
-const msg = () => {
-    const m = $("#rm").value.trim();
-    if (m) (cur.m = cur.m || []).push({ s: B, t: m });
-    return m;
-};
-function send() {
-    if (!msg()) return toast("Write a message first");
-    sync();
-    draw();
-    toast("Message sent");
+
+function toggleTheme() {
+    const nextTheme = rootElement.dataset.theme === "dark" ? "light" : "dark";
+    rootElement.dataset.theme = nextTheme;
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
 }
-function set(x) {
-    const h = $("#hd");
-    if (x == "Approved / Cleared" && h && h.value)
-        return toast("Cannot clear: " + h.value);
-    if (!msg() && h && h.value) (cur.m = cur.m || []).push({ s: B, t: h.value });
-    cur.st = x;
-    if (x == "Ready for Release" && cur.dv == "Not Applicable")
-        cur.dv = "Ready for Pickup";
-    if (x == "Completed" && cur.dv.includes("Pickup")) cur.dv = "Picked Up";
-    sync();
-    draw();
-    toast("Status: " + x);
+
+function toggleSidebar() {
+    const isCollapsed = rootElement.classList.toggle("sidebar-collapsed");
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, isCollapsed);
 }
-if ($$(".li").length) {
-    $$(".li").forEach(
-        (e) =>
-        (e.onclick = () => {
-            $$(".li").forEach((x) => x.classList.remove("on"));
-            e.classList.add("on");
-            cur = JSON.parse(e.dataset.r);
-            row = e;
-            draw();
-        }),
-    );
-    const flt = () => {
-        const q = $("#q").value.toLowerCase(),
-            s = $(".seg .on").dataset.f.split(",");
-        let n = 0;
-        $$(".li").forEach((t) => {
-            const v =
-                t.textContent.toLowerCase().includes(q) &&
-                (!s[0] || s.includes(JSON.parse(t.dataset.r).st));
-            t.hidden = !v;
-            n += v;
+
+function initLayoutControls() {
+    const themeToggle = selectOne("#theme-toggle");
+    const sidebarToggle = selectOne("#sidebar-toggle");
+
+    if (themeToggle) themeToggle.addEventListener("click", toggleTheme);
+    if (sidebarToggle) sidebarToggle.addEventListener("click", toggleSidebar);
+}
+
+function initToastTriggers() {
+    selectAll(".toggle-switch").forEach((toggleSwitch) => {
+        toggleSwitch.addEventListener("change", () => showToast("Saved"));
+    });
+
+    // Delegated so buttons rendered later (like the detail pane) also work.
+    document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-toast-message]");
+        if (trigger) showToast(trigger.dataset.toastMessage);
+    });
+}
+
+function initDefaultUserIdAutofill() {
+    const userIdInput = selectOne("#user-id-input");
+
+    selectAll("[name=role]").forEach((roleRadio) => {
+        roleRadio.addEventListener("change", () => {
+            userIdInput.value = roleRadio.dataset.defaultUserId || "";
         });
-        $("#cnt").textContent =
-            "Displaying " + (n ? "1-" + n : 0) + " of " + n + " results.";
-    };
-    $("#q").oninput = flt;
-    $$(".seg button").forEach(
-        (b) =>
-        (b.onclick = () => {
-            $$(".seg button").forEach((x) => x.classList.remove("on"));
-            b.classList.add("on");
-            flt();
-        }),
-    );
-    flt();
-    const h = location.hash.slice(1);
-    ($$(".li").find((e) => JSON.parse(e.dataset.r).id == h) || $(".li")).click();
+    });
 }
+
+function showActivationStep(step) {
+    selectAll(".activation-step").forEach((section) => {
+        section.hidden = section.id !== `activation-step-${step}`;
+    });
+}
+
+function finishActivation() {
+    showToast("Account activated");
+    setTimeout(() => (location.href = "index.php"), REDIRECT_DELAY_MS);
+}
+
+function initActivationFlow() {
+    selectAll("[data-next-step]").forEach((button) => {
+        button.addEventListener("click", (event) => {
+            event.preventDefault();
+
+            const nextStep = button.dataset.nextStep;
+            if (nextStep === "done") finishActivation();
+            else showActivationStep(nextStep);
+        });
+    });
+}
+
+function simulateConnectionAction(button, successMessage, onSuccess) {
+    const connectionStatus = selectOne("#connection-status");
+
+    button.addEventListener("click", () => {
+        connectionStatus.textContent = "Working...";
+
+        setTimeout(() => {
+            connectionStatus.textContent = "Connected";
+            onSuccess();
+            showToast(successMessage);
+        }, SIMULATED_NETWORK_DELAY_MS);
+    });
+}
+
+function initIntegrationActions() {
+    const testConnectionButton = selectOne("#test-connection-button");
+    if (!testConnectionButton) return;
+
+    simulateConnectionAction(testConnectionButton, "Connection OK", () => {
+        const latencyMs = Math.floor(
+            MIN_LATENCY_MS + Math.random() * LATENCY_RANGE_MS,
+        );
+        selectOne("#connection-latency").textContent = `${latencyMs} ms`;
+    });
+
+    simulateConnectionAction(selectOne("#sync-button"), "Sync complete", () => {
+        selectOne("#last-sync").textContent = "Last sync: just now";
+    });
+}
+
+function initRequestForm() {
+    const requestForm = selectOne("#request-form");
+    if (!requestForm) return;
+
+    const documentTypeSelect = selectOne("#document-type-select");
+    const fileInput = selectOne("#file-input");
+
+    function updateFormForSelectedDocumentType() {
+        const selectedOption = documentTypeSelect.selectedOptions[0];
+        const allowsUpload = selectedOption.dataset.allowsUpload === "true";
+        const fee = Number(selectedOption.dataset.fee);
+
+        selectOne("#other-document-field").hidden =
+            selectedOption.text !== OTHER_DOCUMENT_TYPE;
+        selectOne("#upload-section").hidden = !allowsUpload;
+        selectOne("#no-upload-notice").hidden = allowsUpload;
+        selectOne("#fee-amount").textContent = fee > 0 ? `₱${fee}` : "No fee";
+    }
+
+    documentTypeSelect.addEventListener(
+        "change",
+        updateFormForSelectedDocumentType,
+    );
+    updateFormForSelectedDocumentType();
+
+    fileInput.addEventListener("change", () => {
+        const fileNames = [...fileInput.files].map((file) => file.name);
+        selectOne("#file-list").textContent = fileNames.join(", ");
+    });
+
+    requestForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        showToast("Request submitted");
+        setTimeout(
+            () => (location.href = "my-requests.php"),
+            REDIRECT_DELAY_MS,
+        );
+    });
+}
+
+let selectedRequest = null;
+let selectedListItem = null;
+
+function getDemoPurpose(request) {
+    // Demo requests have no purpose field, so derive a stable one from the
+    // request number.
+    const requestNumber = Number(request.requestId.slice("AX-".length));
+    return REQUEST_PURPOSES[requestNumber % REQUEST_PURPOSES.length];
+}
+
+function getProgressIndex(request) {
+    // A request needing correction goes back to review, so its history stops
+    // at that step.
+    return request.status === STATUS.NEEDS_CORRECTION
+        ? REQUEST_PROGRESS_STEPS.indexOf(STATUS.UNDER_REVIEW)
+        : REQUEST_PROGRESS_STEPS.indexOf(request.status);
+}
+
+function renderOptions(labels, selectedLabel) {
+    return labels
+        .map((label) => {
+            const selectedAttribute =
+                label === selectedLabel ? " selected" : "";
+            return `<option${selectedAttribute}>${label}</option>`;
+        })
+        .join("");
+}
+
+function renderChecklistChip(label, isChecked) {
+    const mutedClass = isChecked ? "" : " chip-muted";
+    const checkMark = isChecked ? "✓" : "○";
+    return `<span class="chip${mutedClass}">${checkMark} ${label}</span>`;
+}
+
+function renderMessage({ isOwnMessage, text, caption }) {
+    const ownMessageClass = isOwnMessage ? " own-message" : "";
+    return [
+        `<div class="message-wrapper${ownMessageClass}">`,
+        `<small>${caption}</small>`,
+        `<div class="message-bubble">${text}</div>`,
+        "</div>",
+    ].join("");
+}
+
+function renderStatusEvent(label) {
+    return `<div class="status-event">${label}</div>`;
+}
+
+function renderInitialRequestMessage(request) {
+    const text =
+        `Hello, I would like to request my ${request.documentType}. ` +
+        `Purpose: ${getDemoPurpose(request)}. ` +
+        "I attached my request letter and valid ID.";
+    const studentCaption = isStaffView ? request.studentName : "You";
+
+    return renderMessage({
+        isOwnMessage: !isStaffView,
+        text,
+        caption: `${studentCaption}, ${request.requestedDate}`,
+    });
+}
+
+function renderProgressEvents(request) {
+    const reachedSteps = REQUEST_PROGRESS_STEPS.slice(
+        1,
+        getProgressIndex(request) + 1,
+    );
+    const eventLabels = TERMINATED_STATUSES.includes(request.status)
+        ? [...reachedSteps, request.status]
+        : reachedSteps;
+
+    return eventLabels.map(renderStatusEvent).join("");
+}
+
+function renderRegistrarRemark(request) {
+    if (!request.registrarRemark) return "";
+
+    return renderMessage({
+        isOwnMessage: isStaffView,
+        text: request.registrarRemark,
+        caption: isStaffView ? "You" : REGISTRAR_STAFF_LABEL,
+    });
+}
+
+function renderConversation(request) {
+    const otherPartyLabel = isStaffView
+        ? request.studentName
+        : REGISTRAR_STAFF_LABEL;
+
+    return (request.messages || [])
+        .map((message) => {
+            const isOwnMessage = message.sender === userRole;
+            return renderMessage({
+                isOwnMessage,
+                text: message.text,
+                caption: isOwnMessage ? "You" : otherPartyLabel,
+            });
+        })
+        .join("");
+}
+
+function renderThread(request) {
+    return [
+        renderInitialRequestMessage(request),
+        renderProgressEvents(request),
+        renderRegistrarRemark(request),
+        renderConversation(request),
+    ].join("");
+}
+
+function renderStaffControls(request) {
+    return [
+        '<div class="staff-controls">',
+        "<label>Blocking issue",
+        '<select class="form-control" id="blocking-issue-select">',
+        `<option value="">None</option>${renderOptions(BLOCKING_ISSUES)}`,
+        "</select></label>",
+        "<label>Payment",
+        '<select class="form-control" data-request-field="paymentStatus">',
+        renderOptions(Object.values(PAYMENT_STATUS), request.paymentStatus),
+        "</select></label>",
+        "<label>Release",
+        '<select class="form-control" data-request-field="releaseStatus">',
+        renderOptions(Object.values(RELEASE_STATUS), request.releaseStatus),
+        "</select></label>",
+        "</div>",
+    ].join("");
+}
+
+function renderStudentSummary(request) {
+    return [
+        '<div class="detail-chip-row">',
+        '<span class="text-muted">Release</span>',
+        renderStatusPill(request.releaseStatus),
+        '<span class="text-muted">Payment</span>',
+        renderStatusPill(request.paymentStatus),
+        "</div>",
+    ].join("");
+}
+
+function renderDetailHeader(request) {
+    const avatarSource = isStaffView
+        ? request.studentName
+        : request.documentType;
+    const studentSummary = [
+        request.studentName,
+        request.studentId,
+        DEMO_STUDENT_PROGRAM,
+    ].join(", ");
+    const subtitle = isStaffView
+        ? studentSummary
+        : `${request.requestId}, requested ${request.requestedDate}`;
+
+    return [
+        '<div class="detail-header">',
+        `<span class="avatar">${getInitials(avatarSource)}</span>`,
+        `<div><b>${request.documentType}</b>`,
+        `<div class="text-muted">${subtitle}</div></div>`,
+        '<span class="spacer"></span>',
+        renderStatusPill(request.status),
+        "</div>",
+    ].join("");
+}
+
+function renderRequirementChips(request) {
+    const isOriginalFormReceived = request.status !== STATUS.SUBMITTED;
+
+    return [
+        '<div class="detail-chip-row">',
+        `<span class="chip">${PAPERCLIP_ICON} ${ATTACHED_FILES_LABEL}</span>`,
+        renderChecklistChip("Request letter", true),
+        renderChecklistChip("Valid ID", true),
+        renderChecklistChip("Original form, in person", isOriginalFormReceived),
+        "</div>",
+    ].join("");
+}
+
+function renderDetailCard(request) {
+    return [
+        '<div class="detail-card">',
+        renderDetailHeader(request),
+        renderRequirementChips(request),
+        isStaffView
+            ? renderStaffControls(request)
+            : renderStudentSummary(request),
+        "</div>",
+    ].join("");
+}
+
+function renderStatusButton(newStatus, label) {
+    return [
+        '<button class="button button-secondary" ',
+        `data-action="change-status" data-status="${newStatus}">`,
+        `${label}</button>`,
+    ].join("");
+}
+
+function renderStatusActions(request) {
+    if (!isStaffView) {
+        return request.status === STATUS.SUBMITTED
+            ? renderStatusButton(STATUS.CANCELLED, "Cancel request")
+            : "";
+    }
+
+    return (ALLOWED_STATUS_TRANSITIONS[request.status] || [])
+        .map((newStatus) => {
+            const isStartingReview =
+                request.status === STATUS.SUBMITTED &&
+                newStatus === STATUS.UNDER_REVIEW;
+            return renderStatusButton(
+                newStatus,
+                isStartingReview ? "Start review" : newStatus,
+            );
+        })
+        .join("");
+}
+
+function renderComposer(request) {
+    const placeholder = isStaffView
+        ? "Write a remark to the student"
+        : "Write a message to the registrar";
+
+    return [
+        '<div class="composer">',
+        `<textarea id="message-input" rows="2" placeholder="${placeholder}">`,
+        "</textarea>",
+        '<div class="composer-footer">',
+        '<button class="button button-secondary" ',
+        'data-toast-message="File picker opens here">',
+        `${PAPERCLIP_ICON} Upload</button>`,
+        '<span class="spacer"></span>',
+        renderStatusActions(request),
+        '<button class="button" data-action="send-message">',
+        `Send ${SEND_ICON}</button>`,
+        "</div>",
+        "</div>",
+    ].join("");
+}
+
+function renderRequestDetail(request) {
+    return [
+        renderDetailCard(request),
+        `<div class="message-thread">${renderThread(request)}</div>`,
+        renderComposer(request),
+    ].join("");
+}
+
+function renderSelectedRequest() {
+    selectOne("#request-detail").innerHTML =
+        renderRequestDetail(selectedRequest);
+
+    const thread = selectOne(".message-thread");
+    thread.scrollTop = thread.scrollHeight;
+}
+
+function syncSelectedListItem() {
+    selectedListItem.dataset.request = JSON.stringify(selectedRequest);
+
+    const statusCell = selectedListItem.querySelector(".request-status");
+    if (statusCell)
+        statusCell.innerHTML = renderStatusPill(selectedRequest.status);
+}
+
+function readMessageInput() {
+    return selectOne("#message-input").value.trim();
+}
+
+function addMessage(text) {
+    selectedRequest.messages = selectedRequest.messages || [];
+    selectedRequest.messages.push({ sender: userRole, text });
+}
+
+function updateReleaseStatusFor(newStatus) {
+    const { releaseStatus } = selectedRequest;
+
+    if (
+        newStatus === STATUS.READY_FOR_RELEASE &&
+        releaseStatus === RELEASE_STATUS.NOT_APPLICABLE
+    ) {
+        selectedRequest.releaseStatus = RELEASE_STATUS.READY_FOR_PICKUP;
+    } else if (
+        newStatus === STATUS.COMPLETED &&
+        PICKUP_PENDING_STATUSES.includes(releaseStatus)
+    ) {
+        selectedRequest.releaseStatus = RELEASE_STATUS.PICKED_UP;
+    }
+}
+
+function changeStatus(newStatus) {
+    const blockingIssueSelect = selectOne("#blocking-issue-select");
+    const blockingIssue = blockingIssueSelect ? blockingIssueSelect.value : "";
+
+    if (newStatus === STATUS.APPROVED_CLEARED && blockingIssue) {
+        showToast(`Cannot clear: ${blockingIssue}`);
+        return;
+    }
+
+    const messageText = readMessageInput() || blockingIssue;
+    if (messageText) addMessage(messageText);
+
+    selectedRequest.status = newStatus;
+    updateReleaseStatusFor(newStatus);
+    syncSelectedListItem();
+    renderSelectedRequest();
+    showToast(`Status: ${newStatus}`);
+}
+
+function sendMessage() {
+    const messageText = readMessageInput();
+    if (!messageText) {
+        showToast("Write a message first");
+        return;
+    }
+
+    addMessage(messageText);
+    syncSelectedListItem();
+    renderSelectedRequest();
+    showToast("Message sent");
+}
+
+function selectListItem(listItem) {
+    selectAll(".request-list-item").forEach((item) => {
+        item.classList.remove("active");
+    });
+    listItem.classList.add("active");
+
+    selectedRequest = JSON.parse(listItem.dataset.request);
+    selectedListItem = listItem;
+    renderSelectedRequest();
+}
+
+function formatResultCount(count) {
+    const range = count ? `1-${count}` : 0;
+    return `Displaying ${range} of ${count} results.`;
+}
+
+function applyListFilters() {
+    const searchText = selectOne("#request-search").value.toLowerCase();
+    const activeFilterButton = selectOne(".status-filter .active");
+    const allowedStatuses = activeFilterButton.dataset.statuses
+        ? activeFilterButton.dataset.statuses.split(",")
+        : [];
+    let visibleCount = 0;
+
+    selectAll(".request-list-item").forEach((item) => {
+        const { status } = JSON.parse(item.dataset.request);
+        const matchesSearch = item.textContent
+            .toLowerCase()
+            .includes(searchText);
+        const matchesStatus =
+            allowedStatuses.length === 0 || allowedStatuses.includes(status);
+
+        item.hidden = !(matchesSearch && matchesStatus);
+        if (!item.hidden) visibleCount++;
+    });
+
+    selectOne("#result-count").textContent = formatResultCount(visibleCount);
+}
+
+function selectInitialListItem(listItems) {
+    const requestIdFromUrl = location.hash.slice(1);
+    const linkedItem = listItems.find(
+        (item) =>
+            JSON.parse(item.dataset.request).requestId === requestIdFromUrl,
+    );
+
+    selectListItem(linkedItem || listItems[0]);
+}
+
+function initRequestWorkspace() {
+    const listItems = selectAll(".request-list-item");
+    if (listItems.length === 0) return;
+
+    const detailPane = selectOne("#request-detail");
+
+    listItems.forEach((listItem) => {
+        listItem.addEventListener("click", () => selectListItem(listItem));
+    });
+
+    detailPane.addEventListener("click", (event) => {
+        const actionButton = event.target.closest("[data-action]");
+        if (!actionButton) return;
+
+        if (actionButton.dataset.action === "change-status") {
+            changeStatus(actionButton.dataset.status);
+        } else if (actionButton.dataset.action === "send-message") {
+            sendMessage();
+        }
+    });
+
+    detailPane.addEventListener("change", (event) => {
+        const fieldName = event.target.dataset.requestField;
+        if (!fieldName) return;
+
+        selectedRequest[fieldName] = event.target.value;
+        syncSelectedListItem();
+    });
+
+    selectOne("#request-search").addEventListener("input", applyListFilters);
+
+    selectAll(".status-filter button").forEach((filterButton) => {
+        filterButton.addEventListener("click", () => {
+            selectAll(".status-filter button").forEach((button) => {
+                button.classList.remove("active");
+            });
+            filterButton.classList.add("active");
+            applyListFilters();
+        });
+    });
+
+    applyListFilters();
+    selectInitialListItem(listItems);
+}
+
+initLayoutControls();
+initToastTriggers();
+initDefaultUserIdAutofill();
+initActivationFlow();
+initIntegrationActions();
+initRequestForm();
+initRequestWorkspace();

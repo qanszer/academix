@@ -1,13 +1,38 @@
-<?php $role = 'admin';
-$page = 'employees';
-$title = 'Employees';
-require '../inc/top.php';
-$c = '2.2fr 1fr 1fr 2.2fr 1.3fr 60px' ?>
-<div class=pn style="overflow-x:auto">
-    <div style="min-width:840px">
-        <p class=mu style="margin-bottom:14px">Accounts come from the university system. You can turn access on or off.</p>
-        <?php row($c, ['Name', 'Employee ID', 'Office', 'Email', 'Last login', 'Access'], 1);
-        foreach ($E as $e) row($c, [nm($e[0]), $e[1], $e[2], $e[3], $e[4], '<input class=sw type=checkbox ' . ($e[5] ? 'checked' : '') . '>']) ?>
+<?php
+
+require __DIR__ . '/../includes/bootstrap.php';
+
+$requiredRole = ROLE_ADMIN;
+$currentPage = 'employees';
+$pageTitle = 'Employees';
+require __DIR__ . '/../includes/header.php';
+
+$columnHeaders = [
+    'Name',
+    'Employee ID',
+    'Office',
+    'Email',
+    'Last login',
+    'Access',
+];
+?>
+<div class="panel panel-scrollable">
+    <div class="employees-table">
+        <p class="text-muted form-note">
+            Accounts come from the university system. You can turn access on or
+            off.
+        </p>
+        <?= renderTableRow($columnHeaders, true) ?>
+        <?php foreach ($employees as $employee): ?>
+            <?= renderTableRow([
+                renderAvatarWithName($employee['name']),
+                $employee['employeeId'],
+                $employee['office'],
+                $employee['email'],
+                $employee['lastLogin'],
+                renderToggleSwitch($employee['hasAccess']),
+            ]) ?>
+        <?php endforeach ?>
     </div>
 </div>
-<?php require '../inc/bottom.php' ?>
+<?php require __DIR__ . '/../includes/footer.php' ?>
