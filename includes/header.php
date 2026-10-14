@@ -39,13 +39,13 @@ $userRoleLabel = ROLE_LABELS[$requiredRole];
                     <?= renderIcon('edit') ?>New request
                 </a>
             <?php endif ?>
-            <button class="icon-button" id="theme-toggle"
-                title="Toggle theme">
-                <?= renderIcon('moon') ?>
-            </button>
             <button class="icon-button"
                 data-toast-message="No new notifications">
                 <?= renderIcon('bell') ?>
+            </button>
+            <button class="icon-button" id="theme-toggle"
+                title="Toggle theme">
+                <?= renderIcon('moon') ?>
             </button>
             <span class="user-chip">
                 <span class="avatar"><?= getInitials($userName) ?></span>
