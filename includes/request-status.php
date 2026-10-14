@@ -16,6 +16,10 @@ const RELEASE_READY_FOR_PICKUP = 'Ready for Pickup';
 const RELEASE_PICKED_UP = 'Picked Up';
 const RELEASE_DELIVERED = 'Delivered';
 
+const REQUIREMENT_RECEIVED = 'Received';
+const REQUIREMENT_REPLACEMENT_NEEDED = 'Needs replacement';
+const REQUIREMENT_MISSING = 'Missing';
+
 const PAYMENT_UNPAID = 'Unpaid';
 const PAYMENT_PAID = 'Paid';
 const PAYMENT_WAIVED = 'Waived';
@@ -49,6 +53,12 @@ const STATUS_FILTERS = [
     'Active' => ACTIVE_STATUSES,
     'Ready' => [STATUS_READY_FOR_RELEASE],
     'Closed' => CLOSED_STATUSES,
+];
+
+const STATUSES_WITH_PENDING_ORIGINAL_FORM = [
+    STATUS_SUBMITTED,
+    STATUS_UNDER_REVIEW,
+    STATUS_NEEDS_CORRECTION,
 ];
 
 const STAFF_ATTENTION_STATUSES = [STATUS_SUBMITTED];

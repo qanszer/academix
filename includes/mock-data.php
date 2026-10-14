@@ -134,6 +134,65 @@ $allRequests = [
     ],
 ];
 
+const DEMO_PURPOSES = ['Employment', 'Scholarship', 'Board exam', 'Transfer'];
+const DEMO_REQUEST_TIMES = ['8:15 AM', '9:42 AM', '10:30 AM', '1:05 PM'];
+const DEFAULT_RELEASE_METHOD = 'On-site pickup';
+
+function buildDemoRequirements(string $status): array
+{
+    $requirements = [
+        [
+            'label' => 'Request letter',
+            'status' => REQUIREMENT_RECEIVED,
+            'fileName' => 'request-letter.pdf',
+            'fileSize' => '182 KB',
+        ],
+        [
+            'label' => 'Valid ID',
+            'status' => $status === STATUS_NEEDS_CORRECTION
+                ? REQUIREMENT_REPLACEMENT_NEEDED
+                : REQUIREMENT_RECEIVED,
+            'fileName' => 'valid-id.jpg',
+            'fileSize' => '1.2 MB',
+        ],
+    ];
+
+    if (in_array($status, STATUSES_WITH_PENDING_ORIGINAL_FORM, true)) {
+        $requirements[] = [
+            'label' => 'Original clearance form',
+            'status' => REQUIREMENT_MISSING,
+            'note' => 'Submit in person at the Registrar',
+            'fileName' => null,
+            'fileSize' => null,
+        ];
+    }
+
+    return $requirements;
+}
+
+$feeByDocumentType = array_column($documentTypes, 'fee', 'name');
+
+$allRequests = array_map(
+    function (array $request) use ($feeByDocumentType) {
+        $requestNumber = (int) substr($request['requestId'], strlen('AX-'));
+        $purpose = DEMO_PURPOSES[$requestNumber % count(DEMO_PURPOSES)];
+        $requestTime =
+            DEMO_REQUEST_TIMES[$requestNumber % count(DEMO_REQUEST_TIMES)];
+
+        return $request + [
+            'fee' => $feeByDocumentType[$request['documentType']] ?? 0,
+            'purpose' => $purpose,
+            'requestedTime' => $requestTime,
+            'preferredRelease' => DEFAULT_RELEASE_METHOD,
+            'supportingInfo' => 'I need this document for my '
+                . strtolower($purpose)
+                . ' application. Please process it as soon as possible.',
+            'requirements' => buildDemoRequirements($request['status']),
+        ];
+    },
+    $allRequests
+);
+
 $currentStudentRequests = array_values(array_filter(
     $allRequests,
     fn($request) => $request['studentId'] === $currentStudent['studentId']

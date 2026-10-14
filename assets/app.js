@@ -83,6 +83,22 @@ const STATUS_PILL_CLASSES = {
     [PAYMENT_STATUS.PAID]: "status-pill-muted",
 };
 
+const REQUIREMENT_STATUS = Object.freeze({
+    RECEIVED: "Received",
+    REPLACEMENT_NEEDED: "Needs replacement",
+    MISSING: "Missing",
+});
+
+// Statuses during which the student can still add or replace files.
+const FILE_UPLOAD_STATUSES = [
+    STATUS.SUBMITTED,
+    STATUS.UNDER_REVIEW,
+    STATUS.NEEDS_CORRECTION,
+];
+
+const FILE_PICKER_MESSAGE = "File picker opens here";
+const FILE_PREVIEW_MESSAGE = "Preview opens here";
+
 const BLOCKING_ISSUES = [
     "Outstanding balance",
     "Pending clearance",
@@ -90,16 +106,8 @@ const BLOCKING_ISSUES = [
     "Missing requirement",
 ];
 
-const REQUEST_PURPOSES = [
-    "Employment",
-    "Scholarship",
-    "Board exam",
-    "Transfer",
-];
-
 const OTHER_DOCUMENT_TYPE = "Other";
 const REGISTRAR_STAFF_LABEL = "Registrar staff";
-const ATTACHED_FILES_LABEL = "2 files";
 const DEMO_STUDENT_PROGRAM = "BS Computer Science, 3rd Year";
 
 const rootElement = document.documentElement;
@@ -119,6 +127,15 @@ const PAPERCLIP_ICON = createIcon(
         'a2 2 0 0 1-3-3l8-8"/>',
 );
 const SEND_ICON = createIcon('<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>');
+const CHECK_ICON = createIcon('<path d="M20 6L9 17l-5-5"/>');
+const ALERT_ICON = createIcon(
+    '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+);
+const DOCUMENT_ICON = createIcon(
+    '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>' +
+        '<path d="M14 3v5h5M9 13h6M9 17h6"/>',
+);
+const PLUS_ICON = createIcon('<path d="M12 5v14M5 12h14"/>');
 
 function getInitials(text) {
     // Skips the word "of" so "Transcript of Records" gives "TR", not "TO".
@@ -277,13 +294,6 @@ function initRequestForm() {
 let selectedRequest = null;
 let selectedListItem = null;
 
-function getDemoPurpose(request) {
-    // Demo requests have no purpose field, so derive a stable one from the
-    // request number.
-    const requestNumber = Number(request.requestId.slice("AX-".length));
-    return REQUEST_PURPOSES[requestNumber % REQUEST_PURPOSES.length];
-}
-
 function getProgressIndex(request) {
     // A request needing correction goes back to review, so its history stops
     // at that step.
@@ -300,12 +310,6 @@ function renderOptions(labels, selectedLabel) {
             return `<option${selectedAttribute}>${label}</option>`;
         })
         .join("");
-}
-
-function renderChecklistChip(label, isChecked) {
-    const mutedClass = isChecked ? "" : " chip-muted";
-    const checkMark = isChecked ? "✓" : "○";
-    return `<span class="chip${mutedClass}">${checkMark} ${label}</span>`;
 }
 
 function renderMessage({ isOwnMessage, text, caption }) {
@@ -325,7 +329,7 @@ function renderStatusEvent(label) {
 function renderInitialRequestMessage(request) {
     const text =
         `Hello, I would like to request my ${request.documentType}. ` +
-        `Purpose: ${getDemoPurpose(request)}. ` +
+        `Purpose: ${request.purpose}. ` +
         "I attached my request letter and valid ID.";
     const studentCaption = isStaffView ? request.studentName : "You";
 
@@ -384,141 +388,394 @@ function renderThread(request) {
     ].join("");
 }
 
-function renderStaffControls(request) {
-    return [
-        '<div class="staff-controls">',
-        "<label>Blocking issue",
-        '<select class="form-control" id="blocking-issue-select">',
-        `<option value="">None</option>${renderOptions(BLOCKING_ISSUES)}`,
-        "</select></label>",
-        "<label>Payment",
-        '<select class="form-control" data-request-field="paymentStatus">',
-        renderOptions(Object.values(PAYMENT_STATUS), request.paymentStatus),
-        "</select></label>",
-        "<label>Release",
-        '<select class="form-control" data-request-field="releaseStatus">',
-        renderOptions(Object.values(RELEASE_STATUS), request.releaseStatus),
-        "</select></label>",
-        "</div>",
-    ].join("");
+function formatFee(fee) {
+    return fee > 0 ? `₱${fee}` : "No fee";
 }
 
-function renderStudentSummary(request) {
-    return [
-        '<div class="detail-chip-row">',
-        '<span class="text-muted">Release</span>',
-        renderStatusPill(request.releaseStatus),
-        '<span class="text-muted">Payment</span>',
-        renderStatusPill(request.paymentStatus),
-        "</div>",
-    ].join("");
+function getRemarkTitle(request) {
+    if (request.status === STATUS.NEEDS_CORRECTION) {
+        return isStaffView ? "Waiting for corrections" : "Action needed";
+    }
+    if (request.status === STATUS.REJECTED) return "Reason for rejection";
+    return "Registrar note";
+}
+
+function renderProgress(request) {
+    if (TERMINATED_STATUSES.includes(request.status)) {
+        const closedLabel = request.status.toLowerCase();
+        return `<p class="progress-caption">Request ${closedLabel}</p>`;
+    }
+
+    const reachedIndex = getProgressIndex(request);
+    const segments = REQUEST_PROGRESS_STEPS.map((step, index) => {
+        const reachedClass = index <= reachedIndex ? " reached" : "";
+        return `<span class="progress-step${reachedClass}"></span>`;
+    }).join("");
+    const caption =
+        request.status === STATUS.NEEDS_CORRECTION
+            ? "Waiting for corrections"
+            : `Step ${reachedIndex + 1} of ${REQUEST_PROGRESS_STEPS.length}, ${request.status}`;
+
+    return (
+        `<div class="progress-steps">${segments}</div>` +
+        `<p class="progress-caption">${caption}</p>`
+    );
+}
+
+function renderRemarkCallout(request) {
+    if (!request.registrarRemark) return "";
+
+    return `
+        <div class="detail-callout">
+            <b>${getRemarkTitle(request)}</b>
+            <p>${request.registrarRemark}</p>
+        </div>`;
 }
 
 function renderDetailHeader(request) {
-    const avatarSource = isStaffView
-        ? request.studentName
-        : request.documentType;
-    const studentSummary = [
-        request.studentName,
-        request.studentId,
-        DEMO_STUDENT_PROGRAM,
-    ].join(", ");
-    const subtitle = isStaffView
-        ? studentSummary
-        : `${request.requestId}, requested ${request.requestedDate}`;
-
-    return [
-        '<div class="detail-header">',
-        `<span class="avatar">${getInitials(avatarSource)}</span>`,
-        `<div><b>${request.documentType}</b>`,
-        `<div class="text-muted">${subtitle}</div></div>`,
-        '<span class="spacer"></span>',
-        renderStatusPill(request.status),
-        "</div>",
-    ].join("");
+    return `
+        <section class="detail-section">
+            <div class="detail-title-row">
+                <span class="icon-container icon-container-large">
+                    ${DOCUMENT_ICON}
+                </span>
+                <div class="detail-title-block">
+                    <div class="detail-title-line">
+                        <h2 class="detail-title">${request.documentType}</h2>
+                        ${renderStatusPill(request.status)}
+                    </div>
+                    <div class="text-muted">
+                        ${request.requestId}, requested
+                        ${request.requestedDate} at ${request.requestedTime}
+                    </div>
+                </div>
+                <div class="detail-fee">
+                    <div class="detail-fee-amount">
+                        ${formatFee(request.fee)}
+                    </div>
+                    ${renderStatusPill(request.paymentStatus)}
+                </div>
+            </div>
+            ${renderProgress(request)}
+            ${renderRemarkCallout(request)}
+        </section>`;
 }
 
-function renderRequirementChips(request) {
-    const isOriginalFormReceived = request.status !== STATUS.SUBMITTED;
-
-    return [
-        '<div class="detail-chip-row">',
-        `<span class="chip">${PAPERCLIP_ICON} ${ATTACHED_FILES_LABEL}</span>`,
-        renderChecklistChip("Request letter", true),
-        renderChecklistChip("Valid ID", true),
-        renderChecklistChip("Original form, in person", isOriginalFormReceived),
-        "</div>",
-    ].join("");
+function renderDetailRow(label, valueHtml) {
+    return `<dt>${label}</dt><dd>${valueHtml}</dd>`;
 }
 
-function renderDetailCard(request) {
-    return [
-        '<div class="detail-card">',
-        renderDetailHeader(request),
-        renderRequirementChips(request),
-        isStaffView
-            ? renderStaffControls(request)
-            : renderStudentSummary(request),
-        "</div>",
-    ].join("");
+function renderRequestDetails(request) {
+    const rows = [
+        renderDetailRow("Purpose", request.purpose),
+        renderDetailRow("Release method", request.preferredRelease),
+        renderDetailRow(
+            "Release status",
+            renderStatusPill(request.releaseStatus),
+        ),
+        renderDetailRow(
+            "Requested on",
+            `${request.requestedDate}, ${request.requestedTime}`,
+        ),
+    ];
+
+    if (isStaffView) {
+        const student =
+            `${request.studentName}, ${request.studentId}<br>` +
+            `<span class="text-muted">${DEMO_STUDENT_PROGRAM}</span>`;
+        rows.unshift(renderDetailRow("Student", student));
+    }
+
+    return `
+        <div>
+            <h3 class="detail-section-title">Request details</h3>
+            <dl class="detail-list">${rows.join("")}</dl>
+            <h3 class="detail-section-title detail-subsection-title">
+                Supporting information
+            </h3>
+            <p class="detail-paragraph">${request.supportingInfo}</p>
+        </div>`;
 }
 
-function renderStatusButton(newStatus, label) {
-    return [
-        '<button class="button button-secondary" ',
-        `data-action="change-status" data-status="${newStatus}">`,
-        `${label}</button>`,
-    ].join("");
+function renderRequirementRow(requirement) {
+    const isReceived = requirement.status === REQUIREMENT_STATUS.RECEIVED;
+    const pendingClass = isReceived ? "" : " requirement-row-pending";
+
+    return `
+        <li class="requirement-row${pendingClass}">
+            <span class="icon-container">
+                ${isReceived ? CHECK_ICON : ALERT_ICON}
+            </span>
+            <span class="requirement-text">
+                <b>${requirement.label}</b>
+                <small class="text-muted">
+                    ${requirement.note || requirement.status}
+                </small>
+            </span>
+        </li>`;
+}
+
+function renderRequirements(request) {
+    const isPending = (requirement) =>
+        requirement.status !== REQUIREMENT_STATUS.RECEIVED;
+    const pendingCount = request.requirements.filter(isPending).length;
+    const summaryClass = pendingCount
+        ? "status-pill-attention"
+        : "status-pill-muted";
+    const summaryLabel = pendingCount ? `${pendingCount} left` : "Complete";
+    // Pending requirements go first so they are seen before the done ones.
+    const sortedRequirements = [...request.requirements].sort(
+        (a, b) => Number(isPending(b)) - Number(isPending(a)),
+    );
+
+    return `
+        <div>
+            <div class="detail-section-heading">
+                <h3 class="detail-section-title">Requirements</h3>
+                <span class="status-pill ${summaryClass}">${summaryLabel}</span>
+            </div>
+            <ul class="requirement-list">
+                ${sortedRequirements.map(renderRequirementRow).join("")}
+            </ul>
+        </div>`;
+}
+
+function renderFileTile(requirement) {
+    const extension = requirement.fileName.split(".").pop().toUpperCase();
+    const isReceived = requirement.status === REQUIREMENT_STATUS.RECEIVED;
+
+    return `
+        <button class="file-tile"
+            data-toast-message="${FILE_PREVIEW_MESSAGE}">
+            <span class="file-preview">${extension}</span>
+            <span class="file-name">${requirement.fileName}</span>
+            <span class="file-meta">
+                ${isReceived ? requirement.fileSize : requirement.status}
+            </span>
+        </button>`;
+}
+
+function renderAddFileTile() {
+    return `
+        <button class="file-tile"
+            data-toast-message="${FILE_PICKER_MESSAGE}">
+            <span class="file-preview file-preview-add">${PLUS_ICON}</span>
+            <span class="file-name">Add file</span>
+            <span class="file-meta">PDF, JPG or PNG</span>
+        </button>`;
+}
+
+function renderAttachedFiles(request) {
+    const files = request.requirements.filter(
+        (requirement) => requirement.fileName,
+    );
+    const canAddFiles =
+        !isStaffView && FILE_UPLOAD_STATUSES.includes(request.status);
+
+    return `
+        <section class="detail-section">
+            <div class="detail-section-heading detail-section-heading-start">
+                <h3 class="detail-section-title">Attached files</h3>
+                <span class="chip">${files.length}</span>
+            </div>
+            <div class="file-grid">
+                ${files.map(renderFileTile).join("")}
+                ${canAddFiles ? renderAddFileTile() : ""}
+            </div>
+        </section>`;
+}
+
+function renderStaffControls(request) {
+    return `
+        <section class="detail-section">
+            <h3 class="detail-section-title">Clearance and release</h3>
+            <div class="staff-controls">
+                <label>Blocking issue
+                    <select class="form-control"
+                        data-request-field="blockingIssue">
+                        <option value="">None</option>
+                        ${renderOptions(BLOCKING_ISSUES, request.blockingIssue)}
+                    </select>
+                </label>
+                <label>Payment
+                    <select class="form-control"
+                        data-request-field="paymentStatus">
+                        ${renderOptions(
+                            Object.values(PAYMENT_STATUS),
+                            request.paymentStatus,
+                        )}
+                    </select>
+                </label>
+                <label>Release
+                    <select class="form-control"
+                        data-request-field="releaseStatus">
+                        ${renderOptions(
+                            Object.values(RELEASE_STATUS),
+                            request.releaseStatus,
+                        )}
+                    </select>
+                </label>
+            </div>
+        </section>`;
+}
+
+function renderComposer() {
+    const placeholder = isStaffView
+        ? "Write a message to the student"
+        : "Write a message to the registrar";
+
+    return `
+        <div class="composer">
+            <textarea id="message-input" rows="2"
+                placeholder="${placeholder}"></textarea>
+            <div class="composer-footer">
+                <button class="button button-secondary"
+                    data-toast-message="${FILE_PICKER_MESSAGE}">
+                    ${PAPERCLIP_ICON} Upload
+                </button>
+                <span class="spacer"></span>
+                <button class="button" data-action="send-message">
+                    Send ${SEND_ICON}
+                </button>
+            </div>
+        </div>`;
+}
+
+function renderMessagesSection(request) {
+    const messageCount =
+        1 +
+        (request.registrarRemark ? 1 : 0) +
+        (request.messages || []).length;
+
+    return `
+        <section class="detail-section">
+            <div class="detail-section-heading detail-section-heading-start">
+                <h3 class="detail-section-title">Messages</h3>
+                <span class="chip">${messageCount}</span>
+            </div>
+            <div class="message-thread">${renderThread(request)}</div>
+            ${renderComposer()}
+        </section>`;
+}
+
+function renderActionButton(label, attributes, isPrimary) {
+    const variantClass = isPrimary ? "" : " button-secondary";
+    return `<button class="button${variantClass}" ${attributes}>${label}</button>`;
+}
+
+function renderStudentActions(request) {
+    if (request.status === STATUS.NEEDS_CORRECTION) {
+        return renderActionButton(
+            "Upload corrected files",
+            `data-toast-message="${FILE_PICKER_MESSAGE}"`,
+            true,
+        );
+    }
+    if (request.status === STATUS.SUBMITTED) {
+        return renderActionButton(
+            "Cancel request",
+            `data-action="change-status" data-status="${STATUS.CANCELLED}"`,
+            false,
+        );
+    }
+    return "";
 }
 
 function renderStatusActions(request) {
-    if (!isStaffView) {
-        return request.status === STATUS.SUBMITTED
-            ? renderStatusButton(STATUS.CANCELLED, "Cancel request")
-            : "";
-    }
+    if (!isStaffView) return renderStudentActions(request);
 
-    return (ALLOWED_STATUS_TRANSITIONS[request.status] || [])
-        .map((newStatus) => {
+    const transitions = ALLOWED_STATUS_TRANSITIONS[request.status] || [];
+
+    // The first transition is the normal next step and is the primary
+    // button. The rest are exceptions. Reversed so the primary sits last.
+    return transitions
+        .map((newStatus, index) => {
             const isStartingReview =
                 request.status === STATUS.SUBMITTED &&
                 newStatus === STATUS.UNDER_REVIEW;
-            return renderStatusButton(
-                newStatus,
+            return renderActionButton(
                 isStartingReview ? "Start review" : newStatus,
+                `data-action="change-status" data-status="${newStatus}"`,
+                index === 0,
             );
         })
+        .reverse()
         .join("");
 }
 
-function renderComposer(request) {
-    const placeholder = isStaffView
-        ? "Write a remark to the student"
-        : "Write a message to the registrar";
+function renderActionBar(request) {
+    const actions = renderStatusActions(request);
+    const remarkInput =
+        isStaffView && actions
+            ? `<input class="form-control action-remark" id="remark-input"
+                placeholder="Remark for the student, optional">`
+            : "";
 
-    return [
-        '<div class="composer">',
-        `<textarea id="message-input" rows="2" placeholder="${placeholder}">`,
-        "</textarea>",
-        '<div class="composer-footer">',
-        '<button class="button button-secondary" ',
-        'data-toast-message="File picker opens here">',
-        `${PAPERCLIP_ICON} Upload</button>`,
-        '<span class="spacer"></span>',
-        renderStatusActions(request),
-        '<button class="button" data-action="send-message">',
-        `Send ${SEND_ICON}</button>`,
-        "</div>",
-        "</div>",
-    ].join("");
+    return `
+        <div class="action-bar">
+            ${remarkInput}
+            <div class="action-total">
+                <span class="action-total-amount">
+                    ${formatFee(request.fee)}
+                </span>
+                ${renderStatusPill(request.paymentStatus)}
+            </div>
+            <span class="spacer"></span>
+            <div class="action-buttons">
+                ${actions || '<span class="text-muted">No action needed</span>'}
+            </div>
+        </div>`;
 }
 
 function renderRequestDetail(request) {
-    return [
-        renderDetailCard(request),
-        `<div class="message-thread">${renderThread(request)}</div>`,
-        renderComposer(request),
-    ].join("");
+    return `
+        <div class="detail-card">
+            ${renderDetailHeader(request)}
+            <section class="detail-section detail-grid">
+                ${renderRequestDetails(request)}
+                ${renderRequirements(request)}
+            </section>
+            ${renderAttachedFiles(request)}
+            ${isStaffView ? renderStaffControls(request) : ""}
+            ${renderMessagesSection(request)}
+            ${renderActionBar(request)}
+        </div>`;
+}
+
+function readInputValue(selector) {
+    const input = selectOne(selector);
+    return input ? input.value.trim() : "";
+}
+
+function changeStatus(newStatus) {
+    const blockingIssue = selectedRequest.blockingIssue || "";
+
+    if (newStatus === STATUS.APPROVED_CLEARED && blockingIssue) {
+        showToast(`Cannot clear: ${blockingIssue}`);
+        return;
+    }
+
+    const remarkText = readInputValue("#remark-input") || blockingIssue;
+    if (remarkText) addMessage(remarkText);
+
+    selectedRequest.status = newStatus;
+    updateReleaseStatusFor(newStatus);
+    syncSelectedListItem();
+    renderSelectedRequest();
+    showToast(`Status: ${newStatus}`);
+}
+
+function sendMessage() {
+    const messageText = readInputValue("#message-input");
+    if (!messageText) {
+        showToast("Write a message first");
+        return;
+    }
+
+    addMessage(messageText);
+    syncSelectedListItem();
+    renderSelectedRequest();
+    showToast("Message sent");
 }
 
 function renderSelectedRequest() {
@@ -535,10 +792,6 @@ function syncSelectedListItem() {
     const statusCell = selectedListItem.querySelector(".request-status");
     if (statusCell)
         statusCell.innerHTML = renderStatusPill(selectedRequest.status);
-}
-
-function readMessageInput() {
-    return selectOne("#message-input").value.trim();
 }
 
 function addMessage(text) {
@@ -560,38 +813,6 @@ function updateReleaseStatusFor(newStatus) {
     ) {
         selectedRequest.releaseStatus = RELEASE_STATUS.PICKED_UP;
     }
-}
-
-function changeStatus(newStatus) {
-    const blockingIssueSelect = selectOne("#blocking-issue-select");
-    const blockingIssue = blockingIssueSelect ? blockingIssueSelect.value : "";
-
-    if (newStatus === STATUS.APPROVED_CLEARED && blockingIssue) {
-        showToast(`Cannot clear: ${blockingIssue}`);
-        return;
-    }
-
-    const messageText = readMessageInput() || blockingIssue;
-    if (messageText) addMessage(messageText);
-
-    selectedRequest.status = newStatus;
-    updateReleaseStatusFor(newStatus);
-    syncSelectedListItem();
-    renderSelectedRequest();
-    showToast(`Status: ${newStatus}`);
-}
-
-function sendMessage() {
-    const messageText = readMessageInput();
-    if (!messageText) {
-        showToast("Write a message first");
-        return;
-    }
-
-    addMessage(messageText);
-    syncSelectedListItem();
-    renderSelectedRequest();
-    showToast("Message sent");
 }
 
 function selectListItem(listItem) {
@@ -670,6 +891,7 @@ function initRequestWorkspace() {
 
         selectedRequest[fieldName] = event.target.value;
         syncSelectedListItem();
+        renderSelectedRequest();
     });
 
     selectOne("#request-search").addEventListener("input", applyListFilters);
