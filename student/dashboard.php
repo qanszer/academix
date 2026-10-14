@@ -24,24 +24,6 @@ $studentDetailFieldByLabel = [
     'Status' => 'status',
 ];
 ?>
-<?= renderStatsGrid([
-    'Active requests' => countRequestsWithStatus(
-        $currentStudentRequests,
-        $inProgressStatuses
-    ),
-    'Needs correction' => countRequestsWithStatus(
-        $currentStudentRequests,
-        [STATUS_NEEDS_CORRECTION]
-    ),
-    'Ready for release' => countRequestsWithStatus(
-        $currentStudentRequests,
-        [STATUS_READY_FOR_RELEASE]
-    ),
-    'Completed' => countRequestsWithStatus(
-        $currentStudentRequests,
-        [STATUS_COMPLETED]
-    ),
-]) ?>
 <?php if ($requestNeedingCorrection): ?>
     <?php $correctionRequestId = $requestNeedingCorrection['requestId'] ?>
     <?php $correctionRemark = $requestNeedingCorrection['registrarRemark'] ?>
