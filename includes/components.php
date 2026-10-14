@@ -168,6 +168,7 @@ function renderRequestWorkspace(array $requests, string $viewerRole): string
 
     return <<<HTML
         <div class="master-detail">
+            <div class="detail-pane" id="request-detail"></div>
             <div class="panel list-panel">
                 <div class="search-box">
                     $searchIcon
@@ -181,7 +182,6 @@ function renderRequestWorkspace(array $requests, string $viewerRole): string
                     <span>$chevronLeftIcon$chevronRightIcon</span>
                 </div>
             </div>
-            <div class="detail-pane" id="request-detail"></div>
         </div>
         HTML;
 }
