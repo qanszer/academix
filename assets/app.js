@@ -102,6 +102,10 @@ const FILE_PREVIEW_MESSAGE = "Preview opens here";
 const ALUMNI_ACTIVATED_MESSAGE =
     "Account activated. Login details sent to your email";
 const RESET_LINK_RESENT_MESSAGE = "Reset link sent again";
+const DOCUMENT_REQUIRED_MESSAGE = "Choose the document you need first.";
+const OTHER_DOCUMENT_REQUIRED_MESSAGE = "Describe the document you need.";
+const PURPOSE_REQUIRED_MESSAGE =
+    "Enter what you need it for, for example Employment.";
 
 const BLOCKING_ISSUES = [
     "Outstanding balance",
@@ -110,7 +114,9 @@ const BLOCKING_ISSUES = [
     "Missing requirement",
 ];
 
-const OTHER_DOCUMENT_TYPE = "Other";
+const ALL_CATEGORIES = "all";
+const CONTENT_PADDING_PX = 16;
+const DOCUMENT_UNIT_SET = "set";
 const REGISTRAR_STAFF_LABEL = "Registrar staff";
 const DEMO_STUDENT_PROGRAM = "BS Computer Science, 3rd Year";
 
@@ -140,11 +146,40 @@ const DOCUMENT_ICON = createIcon(
         '<path d="M14 3v5h5M9 13h6M9 17h6"/>',
 );
 const PLUS_ICON = createIcon('<path d="M12 5v14M5 12h14"/>');
+const CLOSE_ICON = createIcon('<path d="M18 6L6 18M6 6l12 12"/>');
 
 function getInitials(text) {
     // Skips the word "of" so "Transcript of Records" gives "TR", not "TO".
     const wordInitials = text.match(/\b(?!of\b)\w/gi) || [];
     return wordInitials.slice(0, 2).join("").toUpperCase();
+}
+
+const HTML_ESCAPES = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+};
+
+function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
+}
+
+const BYTES_PER_KB = 1024;
+const BYTES_PER_MB = 1024 * 1024;
+
+function formatFileSize(bytes) {
+    if (bytes < BYTES_PER_MB) {
+        return `${Math.max(1, Math.round(bytes / BYTES_PER_KB))} KB`;
+    }
+    return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`;
+}
+
+function getFileExtension(fileName) {
+    return fileName.includes(".")
+        ? fileName.split(".").pop().toUpperCase()
+        : "FILE";
 }
 
 function renderStatusPill(label) {
@@ -348,19 +383,183 @@ function renderDocumentRequirementRow(requirement) {
         <li class="requirement-row">
             <span class="icon-container">${DOCUMENT_ICON}</span>
             <span class="requirement-text">
-                <b>${requirement.label}</b>
-                <small class="text-muted">${requirement.note}</small>
+                <b>${escapeHtml(requirement.label)}</b>
+                <small class="text-muted">${escapeHtml(requirement.note)}</small>
             </span>
         </li>`;
+}
+
+function renderIncludedDocumentRow(name) {
+    return `
+        <li class="requirement-row">
+            <span class="icon-container">${CHECK_ICON}</span>
+            <span class="requirement-text">
+                <b>${escapeHtml(name)}</b>
+            </span>
+        </li>`;
+}
+
+function readDocumentCard(card) {
+    const { dataset } = card;
+
+    return {
+        label: dataset.label,
+        categoryName: dataset.categoryName,
+        description: dataset.description,
+        fee: Number(dataset.fee),
+        turnaround: dataset.turnaround,
+        unit: dataset.unit,
+        allowsUpload: dataset.allowsUpload === "true",
+        isFreeText: dataset.freeText === "true",
+        requirements: JSON.parse(dataset.requirements),
+        uploadRequirements: JSON.parse(dataset.uploadRequirements),
+        includes: JSON.parse(dataset.includes),
+    };
+}
+
+function getScrollBehavior() {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth";
+}
+
+// Search box and category tabs over the document cards. Everything is
+// filtered in the page, so there is no request while the student types.
+function initCatalogFilters() {
+    const searchInput = selectOne("#catalog-search");
+    const clearButton = selectOne("#catalog-search-clear");
+    const tabs = selectAll(".category-tab");
+    const cards = selectAll(".document-card");
+    const groups = selectAll(".document-group");
+    const countLabel = selectOne("#catalog-count");
+    const emptyState = selectOne("#catalog-empty");
+
+    const getActiveCategory = () =>
+        selectOne('.category-tab[aria-pressed="true"]').dataset.category;
+
+    function setActiveCategory(category) {
+        tabs.forEach((tab) => {
+            tab.setAttribute(
+                "aria-pressed",
+                String(tab.dataset.category === category),
+            );
+        });
+    }
+
+    function formatCount(visibleCount, isFiltered) {
+        if (visibleCount === 0) return "No documents found";
+        if (!isFiltered) return `${cards.length} documents`;
+        return `Showing ${visibleCount} of ${cards.length} documents`;
+    }
+
+    function applyFilters() {
+        const terms = searchInput.value
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(Boolean);
+        const activeCategory = getActiveCategory();
+        const searchMatchesByCategory = {};
+        let searchMatchCount = 0;
+        let visibleCount = 0;
+
+        cards.forEach((card) => {
+            const { category, search } = card.dataset;
+            const matchesSearch = terms.every((term) => search.includes(term));
+            const matchesCategory =
+                activeCategory === ALL_CATEGORIES || category === activeCategory;
+
+            if (matchesSearch) {
+                searchMatchCount++;
+                searchMatchesByCategory[category] =
+                    (searchMatchesByCategory[category] || 0) + 1;
+            }
+            card.hidden = !(matchesSearch && matchesCategory);
+            if (!card.hidden) visibleCount++;
+        });
+
+        groups.forEach((group) => {
+            group.hidden = !group.querySelector(".document-card:not([hidden])");
+        });
+
+        // Tab counts follow the search, so an empty category is visible
+        // before the student clicks it.
+        tabs.forEach((tab) => {
+            const count =
+                tab.dataset.category === ALL_CATEGORIES
+                    ? searchMatchCount
+                    : searchMatchesByCategory[tab.dataset.category] || 0;
+
+            tab.querySelector(".category-tab-count").textContent = count;
+            tab.classList.toggle("category-tab-empty", count === 0);
+        });
+
+        clearButton.hidden = !searchInput.value;
+        emptyState.hidden = visibleCount > 0;
+        countLabel.textContent = formatCount(
+            visibleCount,
+            terms.length > 0 || activeCategory !== ALL_CATEGORIES,
+        );
+    }
+
+    function reset() {
+        searchInput.value = "";
+        setActiveCategory(ALL_CATEGORIES);
+        applyFilters();
+    }
+
+    searchInput.addEventListener("input", applyFilters);
+    searchInput.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && searchInput.value) {
+            event.preventDefault();
+            reset();
+        }
+    });
+    clearButton.addEventListener("click", () => {
+        reset();
+        searchInput.focus();
+    });
+    selectOne("#catalog-reset").addEventListener("click", () => {
+        reset();
+        searchInput.focus();
+    });
+    tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            setActiveCategory(tab.dataset.category);
+            applyFilters();
+        });
+    });
+
+    applyFilters();
+
+    return { searchInput };
 }
 
 function initRequestForm() {
     const requestForm = selectOne("#request-form");
     if (!requestForm) return;
 
-    const documentTypeSelect = selectOne("#document-type-select");
+    const documentCards = selectAll(".document-card");
+    const catalogPanel = selectOne("#catalog-panel");
+    const cancelCatalogButton = selectOne("#catalog-cancel");
+    const catalogError = selectOne("#catalog-error");
+    const selectedBanner = selectOne("#selected-document");
+    const detailsSection = selectOne("#request-details");
+    const documentTypeInput = selectOne("#document-type-input");
     const copiesInput = selectOne("#copies-input");
+    const stepperButtons = selectAll(".stepper-button");
+    const purposeInput = selectOne("#purpose-input");
+    const otherDocumentField = selectOne("#other-document-field");
+    const otherDocumentInput = selectOne("#other-document-input");
     const fileInput = selectOne("#file-input");
+    const fileGrid = selectOne("#file-grid");
+    const addFileButton = selectOne("#add-file-button");
+    const submitButton = selectOne("#submit-button");
+
+    const attachedFiles = [];
+    const previewUrlByFile = new Map();
+    const { searchInput } = initCatalogFilters();
+
+    let selectedDocument = null;
 
     function getCopies() {
         const minCopies = Number(copiesInput.min);
@@ -373,57 +572,326 @@ function initRequestForm() {
         return Math.min(copies, maxCopies);
     }
 
-    function updateFee() {
-        const selectedOption = documentTypeSelect.selectedOptions[0];
-        const fee = Number(selectedOption.dataset.fee);
+    function updateStepper() {
         const copies = getCopies();
-        const feeBreakdown = selectOne("#fee-breakdown");
 
-        selectOne("#fee-amount").textContent = formatFee(fee * copies);
-        feeBreakdown.textContent = `${formatFee(fee)} × ${copies} copies`;
+        // aria-disabled instead of disabled, so the button keeps keyboard
+        // focus when the student steps up to the limit.
+        stepperButtons.forEach((button) => {
+            const nextCopies = copies + Number(button.dataset.step);
+            const isOutOfRange =
+                nextCopies < Number(copiesInput.min) ||
+                nextCopies > Number(copiesInput.max);
+            button.setAttribute("aria-disabled", String(isOutOfRange));
+        });
+    }
+
+    function updateFee() {
+        const feeAmount = selectOne("#fee-amount");
+        const feeBreakdown = selectOne("#fee-breakdown");
+        const copies = getCopies();
+
+        updateStepper();
+
+        if (!selectedDocument) {
+            selectOne("#fee-amount").textContent = "—";
+            feeBreakdown.hidden = true;
+            return;
+        }
+
+        const { fee, unit } = selectedDocument;
+        const unitLabel = unit === DOCUMENT_UNIT_SET ? "sets" : "copies";
+
+        feeAmount.textContent = formatFee(fee * copies);
+        feeAmount.classList.remove("text-muted");
+        feeBreakdown.textContent = `${formatFee(fee)} × ${copies} ${unitLabel}`;
         feeBreakdown.hidden = !(fee > 0 && copies > 1);
     }
 
-    function updateRequirements(selectedOption) {
-        const requirements = JSON.parse(selectedOption.dataset.requirements);
+    function updateCopiesLabels({ unit }) {
+        const isSet = unit === DOCUMENT_UNIT_SET;
+        const [fewerButton, moreButton] = stepperButtons;
 
-        selectOne("#requirements-list").innerHTML = requirements
+        selectOne("#copies-label").textContent = isSet ? "Sets" : "Copies";
+        fewerButton.setAttribute(
+            "aria-label",
+            isSet ? "Fewer sets" : "Fewer copies",
+        );
+        moreButton.setAttribute(
+            "aria-label",
+            isSet ? "More sets" : "More copies",
+        );
+    }
+
+    // A category with one document of the same name would read twice.
+    function setEyebrow(selector, { categoryName, label }) {
+        const eyebrow = selectOne(selector);
+
+        eyebrow.textContent = categoryName;
+        eyebrow.hidden = categoryName === label;
+    }
+
+    function updateSummary(documentType) {
+        selectOne("#summary-empty").hidden = true;
+        selectOne("#summary-filled").hidden = false;
+        setEyebrow("#summary-category", documentType);
+        selectOne("#summary-title").textContent = documentType.label;
+        selectOne("#summary-turnaround").textContent = documentType.turnaround;
+        selectOne("#summary-description").textContent =
+            documentType.description;
+
+        selectOne("#summary-includes").hidden =
+            documentType.includes.length === 0;
+        selectOne("#includes-list").innerHTML = documentType.includes
+            .map(renderIncludedDocumentRow)
+            .join("");
+        selectOne("#requirements-list").innerHTML = documentType.requirements
             .map(renderDocumentRequirementRow)
             .join("");
     }
 
-    function updateFormForSelectedDocumentType() {
-        const selectedOption = documentTypeSelect.selectedOptions[0];
-        const allowsUpload = selectedOption.dataset.allowsUpload === "true";
-
-        selectOne("#other-document-field").hidden =
-            selectedOption.text !== OTHER_DOCUMENT_TYPE;
-        selectOne("#upload-section").hidden = !allowsUpload;
-        selectOne("#no-upload-notice").hidden = allowsUpload;
-        updateRequirements(selectedOption);
-        updateFee();
+    function updateSelectedBanner(documentType) {
+        setEyebrow("#selected-document-category", documentType);
+        selectOne("#selected-document-name").textContent = documentType.label;
+        selectOne("#selected-document-meta").textContent =
+            `${documentType.turnaround} · ${formatFee(documentType.fee)}`;
     }
 
-    documentTypeSelect.addEventListener(
-        "change",
-        updateFormForSelectedDocumentType,
-    );
-    copiesInput.addEventListener("input", updateFee);
-    updateFormForSelectedDocumentType();
+    function updateUploadArea(documentType) {
+        const { allowsUpload, uploadRequirements } = documentType;
+        const uploadHint = selectOne("#upload-hint");
 
+        selectOne("#upload-area").hidden = !allowsUpload;
+        selectOne("#no-upload-notice").hidden = allowsUpload;
+        uploadHint.textContent = `Needed: ${uploadRequirements.join(", ")}`;
+        uploadHint.hidden = uploadRequirements.length === 0;
+    }
+
+    function showCatalogError(message) {
+        catalogError.querySelector("span").textContent = message;
+        catalogError.hidden = false;
+    }
+
+    function showFieldError(input, message) {
+        const errorElement = selectOne(`#${input.id}-error`);
+
+        errorElement.querySelector("span").textContent = message;
+        errorElement.hidden = false;
+        input.setAttribute("aria-invalid", "true");
+    }
+
+    function clearFieldError(input) {
+        selectOne(`#${input.id}-error`).hidden = true;
+        input.removeAttribute("aria-invalid");
+    }
+
+    function findInvalidFields() {
+        const invalidFields = [];
+
+        if (!otherDocumentField.hidden && !otherDocumentInput.value.trim()) {
+            invalidFields.push({
+                input: otherDocumentInput,
+                message: OTHER_DOCUMENT_REQUIRED_MESSAGE,
+            });
+        }
+        if (!purposeInput.value.trim()) {
+            invalidFields.push({
+                input: purposeInput,
+                message: PURPOSE_REQUIRED_MESSAGE,
+            });
+        }
+        return invalidFields;
+    }
+
+    // The catalog and the chosen document never share the screen: picking
+    // collapses the long list down to one row so the form below stays close.
+    function showSelection() {
+        catalogPanel.hidden = true;
+        selectedBanner.hidden = false;
+        detailsSection.hidden = false;
+    }
+
+    function showCatalog() {
+        catalogPanel.hidden = false;
+        selectedBanner.hidden = true;
+        detailsSection.hidden = true;
+        cancelCatalogButton.hidden = !selectedDocument;
+    }
+
+    // Scrolls the page content only. scrollIntoView would also nudge the
+    // outer window, which moves the sidebar and the top bar.
+    function scrollToDocumentSection() {
+        const content = selectOne(".content");
+        const headingTop = selectOne("#document-heading").getBoundingClientRect().top;
+        const contentTop = content.getBoundingClientRect().top;
+
+        content.scrollTo({
+            top: content.scrollTop + headingTop - contentTop - CONTENT_PADDING_PX,
+            behavior: getScrollBehavior(),
+        });
+    }
+
+    function chooseDocument(card) {
+        documentCards.forEach((documentCard) => {
+            documentCard.setAttribute("aria-pressed", String(documentCard === card));
+        });
+
+        selectedDocument = readDocumentCard(card);
+        documentTypeInput.value = selectedDocument.label;
+        catalogError.hidden = true;
+        otherDocumentField.hidden = !selectedDocument.isFreeText;
+        if (!selectedDocument.isFreeText) clearFieldError(otherDocumentInput);
+
+        updateSelectedBanner(selectedDocument);
+        updateSummary(selectedDocument);
+        updateUploadArea(selectedDocument);
+        updateCopiesLabels(selectedDocument);
+        updateFee();
+
+        showSelection();
+        selectedBanner.focus({ preventScroll: true });
+        scrollToDocumentSection();
+    }
+
+    function renderAttachedFileTile(file, index) {
+        const fileName = escapeHtml(file.name);
+        const previewUrl = previewUrlByFile.get(file);
+        const preview = previewUrl
+            ? `<img src="${previewUrl}" alt="">`
+            : escapeHtml(getFileExtension(file.name));
+
+        return `
+            <div class="file-tile file-tile-attached">
+                <span class="file-preview">${preview}</span>
+                <span class="file-name" title="${fileName}">${fileName}</span>
+                <span class="file-meta">${formatFileSize(file.size)}</span>
+                <button class="file-remove" type="button"
+                    data-file-index="${index}"
+                    aria-label="Remove ${fileName}">${CLOSE_ICON}</button>
+            </div>`;
+    }
+
+    function renderAttachedFiles() {
+        selectAll(".file-tile-attached").forEach((tile) => tile.remove());
+        addFileButton.insertAdjacentHTML(
+            "beforebegin",
+            attachedFiles.map(renderAttachedFileTile).join(""),
+        );
+    }
+
+    function attachFile(file) {
+        const isDuplicate = attachedFiles.some(
+            (attachedFile) =>
+                attachedFile.name === file.name &&
+                attachedFile.size === file.size &&
+                attachedFile.lastModified === file.lastModified,
+        );
+        if (isDuplicate) return;
+
+        attachedFiles.push(file);
+        if (file.type.startsWith("image/")) {
+            previewUrlByFile.set(file, URL.createObjectURL(file));
+        }
+    }
+
+    function removeAttachedFile(index) {
+        const [removedFile] = attachedFiles.splice(index, 1);
+        const previewUrl = previewUrlByFile.get(removedFile);
+
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrlByFile.delete(removedFile);
+    }
+
+    // Delegated: the cards are plain buttons, so arrow keys do not change the
+    // choice and collapse the list while the student is still browsing.
+    selectOne("#document-groups").addEventListener("click", (event) => {
+        const card = event.target.closest(".document-card");
+        if (card) chooseDocument(card);
+    });
+    selectOne("#change-document-button").addEventListener("click", () => {
+        showCatalog();
+        scrollToDocumentSection();
+        searchInput.focus({ preventScroll: true });
+    });
+    cancelCatalogButton.addEventListener("click", () => {
+        showSelection();
+        selectedBanner.focus({ preventScroll: true });
+    });
+
+    stepperButtons.forEach((button) => {
+        button.addEventListener("click", () => {
+            if (button.getAttribute("aria-disabled") === "true") return;
+
+            copiesInput.value = getCopies() + Number(button.dataset.step);
+            updateFee();
+        });
+    });
+    copiesInput.addEventListener("input", updateFee);
+    copiesInput.addEventListener("change", () => {
+        copiesInput.value = getCopies();
+        updateFee();
+    });
+
+    selectAll(".suggestion-chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+            purposeInput.value = chip.textContent.trim();
+            clearFieldError(purposeInput);
+            purposeInput.focus();
+        });
+    });
+    [otherDocumentInput, purposeInput].forEach((input) => {
+        input.addEventListener("input", () => clearFieldError(input));
+    });
+
+    addFileButton.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", () => {
-        const fileNames = [...fileInput.files].map((file) => file.name);
-        selectOne("#file-list").textContent = fileNames.join(", ");
+        [...fileInput.files].forEach(attachFile);
+        // Clearing the input lets the student pick the same file again after
+        // removing it.
+        fileInput.value = "";
+        renderAttachedFiles();
+    });
+    fileGrid.addEventListener("click", (event) => {
+        const removeButton = event.target.closest(".file-remove");
+        if (!removeButton) return;
+
+        removeAttachedFile(Number(removeButton.dataset.fileIndex));
+        renderAttachedFiles();
+        addFileButton.focus();
     });
 
     requestForm.addEventListener("submit", (event) => {
         event.preventDefault();
+
+        if (!selectedDocument) {
+            showCatalogError(DOCUMENT_REQUIRED_MESSAGE);
+            scrollToDocumentSection();
+            searchInput.focus({ preventScroll: true });
+            return;
+        }
+        // Submitting with the list open means the student is happy with the
+        // document they already picked.
+        if (!catalogPanel.hidden) showSelection();
+
+        [otherDocumentInput, purposeInput].forEach(clearFieldError);
+        const invalidFields = findInvalidFields();
+        invalidFields.forEach(({ input, message }) => {
+            showFieldError(input, message);
+        });
+        if (invalidFields.length) {
+            invalidFields[0].input.focus();
+            return;
+        }
+
+        submitButton.disabled = true;
         showToast("Request submitted");
         setTimeout(
             () => (location.href = "my-requests.php"),
             REDIRECT_DELAY_MS,
         );
     });
+
+    updateFee();
 }
 
 let selectedRequest = null;

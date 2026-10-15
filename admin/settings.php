@@ -13,14 +13,25 @@ $columnHeaders = ['Document', 'Fee (PHP)', 'Allow upload', 'Enabled'];
     <div class="document-types-table">
         <h3>Document types</h3>
         <?= renderTableRow($columnHeaders, true) ?>
-        <?php foreach ($documentTypes as $documentType): ?>
-            <?php $feeInput = renderFeeInput($documentType['fee']) ?>
-            <?= renderTableRow([
-                renderAvatarWithName($documentType['name']),
-                $feeInput,
-                renderToggleSwitch($documentType['allowsUpload']),
-                renderToggleSwitch(true),
-            ]) ?>
+        <?php foreach ($documentTypesByCategory as $category): ?>
+            <h4 class="table-group-heading">
+                <?= escapeAttribute($category['name']) ?>
+                <span class="document-group-count">
+                    <?= count($category['documents']) ?>
+                </span>
+            </h4>
+            <?php foreach ($category['documents'] as $documentType): ?>
+                <?php $feeInput = renderFeeInput($documentType['fee']) ?>
+                <?= renderTableRow([
+                    renderAvatarWithName(
+                        escapeAttribute($documentType['cardName']),
+                        $documentType['label']
+                    ),
+                    $feeInput,
+                    renderToggleSwitch($documentType['allowsUpload']),
+                    renderToggleSwitch(true),
+                ]) ?>
+            <?php endforeach ?>
         <?php endforeach ?>
         <button class="button button-secondary add-document-type-button"
             data-toast-message="Document type added">

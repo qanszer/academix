@@ -34,7 +34,7 @@ $userRoleLabel = ROLE_LABELS[$requiredRole];
             </button>
             <h1><?= $pageTitle ?></h1>
             <span class="spacer"></span>
-            <?php if ($requiredRole === ROLE_STUDENT): ?>
+            <?php if ($requiredRole === ROLE_STUDENT && $currentPage !== 'new-request'): ?>
                 <a class="button" href="new-request.php">
                     <?= renderIcon('edit') ?>New request
                 </a>
