@@ -16,9 +16,9 @@ function renderStatusPill(string $label): string
     return "<span class=\"$classes\">$label</span>";
 }
 
-function renderAvatarWithName(string $name): string
+function renderAvatarWithName(string $name, ?string $initialsSource = null): string
 {
-    $initials = getInitials($name);
+    $initials = getInitials($initialsSource ?? $name);
 
     return <<<HTML
         <span class="avatar-with-name">
@@ -33,18 +33,196 @@ function renderFeeInput(int $fee): string
     return "<input class=\"form-control\" value=\"$fee\">";
 }
 
-function renderDocumentTypeOption(array $documentType): string
+function formatFee(int $fee): string
 {
-    $allowsUpload = $documentType['allowsUpload'] ? 'true' : 'false';
-    $requirementsJson = htmlspecialchars(
-        json_encode($documentType['requirements']),
-        ENT_QUOTES
+    return $fee > 0 ? "₱$fee" : 'No fee';
+}
+
+function escapeAttribute(string $text): string
+{
+    return htmlspecialchars($text, ENT_QUOTES);
+}
+
+function encodeJsonAttribute(array $value): string
+{
+    return escapeAttribute(json_encode($value));
+}
+
+function getUploadRequirementLabels(array $documentType): array
+{
+    $uploadRequirements = array_filter(
+        $documentType['requirements'],
+        fn($requirement) => $requirement['note'] === REQUIREMENT_NOTE_UPLOAD
     );
 
+    return array_values(array_column($uploadRequirements, 'label'));
+}
+
+function renderDocumentCard(array $documentType, array $category): string
+{
+    $feeClass = $documentType['fee'] > 0 ? '' : ' document-card-fee-none';
+    $feeLabel = formatFee($documentType['fee']);
+    $clockIcon = renderIcon('clock', 15);
+    $checkIcon = renderIcon('check', 14);
+
+    $searchText = strtolower(implode(' ', [
+        $documentType['label'],
+        $category['name'],
+        $documentType['description'],
+        $documentType['keywords'],
+        implode(' ', $documentType['includes']),
+    ]));
+
+    $attributes = [
+        'data-document-id' => $documentType['id'],
+        'data-category' => $category['id'],
+        'data-category-name' => $category['name'],
+        'data-label' => $documentType['label'],
+        'data-description' => $documentType['description'],
+        'data-fee' => (string) $documentType['fee'],
+        'data-turnaround' => $documentType['turnaround'],
+        'data-unit' => $documentType['unit'],
+        'data-allows-upload' => $documentType['allowsUpload'] ? 'true' : 'false',
+        'data-free-text' => $documentType['isFreeText'] ? 'true' : 'false',
+        'data-search' => $searchText,
+    ];
+    $attributesHtml = '';
+    foreach ($attributes as $name => $value) {
+        $attributesHtml .= " $name=\"" . escapeAttribute($value) . '"';
+    }
+
+    $requirementsJson = encodeJsonAttribute($documentType['requirements']);
+    $uploadLabelsJson = encodeJsonAttribute(
+        getUploadRequirementLabels($documentType)
+    );
+    $includesJson = encodeJsonAttribute($documentType['includes']);
+
+    $name = escapeAttribute($documentType['cardName']);
+    $hint = $documentType['hint']
+        ? '<span class="document-card-hint">'
+            . escapeAttribute($documentType['hint']) . '</span>'
+        : '';
+    $turnaround = escapeAttribute($documentType['turnaround']);
+
     return <<<HTML
-        <option data-fee="{$documentType['fee']}"
-            data-allows-upload="$allowsUpload"
-            data-requirements="$requirementsJson">{$documentType['name']}</option>
+        <button class="document-card" type="button" aria-pressed="false"
+            $attributesHtml
+            data-requirements="$requirementsJson"
+            data-upload-requirements="$uploadLabelsJson"
+            data-includes="$includesJson">
+            <span class="document-card-check">$checkIcon</span>
+            <span class="document-card-name">$name</span>
+            $hint
+            <span class="document-card-footer">
+                <span class="document-card-turnaround">
+                    $clockIcon$turnaround
+                </span>
+                <span class="document-card-fee$feeClass">$feeLabel</span>
+            </span>
+        </button>
+        HTML;
+}
+
+function renderCategoryTab(
+    string $id,
+    string $label,
+    int $count,
+    bool $isActive
+): string {
+    $pressed = $isActive ? 'true' : 'false';
+    $label = escapeAttribute($label);
+
+    return <<<HTML
+        <button class="category-tab" type="button" aria-pressed="$pressed"
+            data-category="$id">
+            $label <span class="category-tab-count">$count</span>
+        </button>
+        HTML;
+}
+
+function renderDocumentGroup(array $category): string
+{
+    $name = escapeAttribute($category['name']);
+    $count = count($category['documents']);
+    $headingId = 'group-' . $category['id'];
+    $cardsHtml = '';
+
+    foreach ($category['documents'] as $documentType) {
+        $cardsHtml .= renderDocumentCard($documentType, $category);
+    }
+
+    return <<<HTML
+        <section class="document-group" data-category="{$category['id']}"
+            aria-labelledby="$headingId">
+            <h4 class="document-group-heading" id="$headingId">
+                $name <span class="document-group-count">$count</span>
+            </h4>
+            <div class="document-grid">$cardsHtml</div>
+        </section>
+        HTML;
+}
+
+function renderDocumentCatalog(array $documentTypesByCategory): string
+{
+    $searchIcon = renderIcon('search', 18);
+    $closeIcon = renderIcon('close', 16);
+    $alertIcon = renderIcon('alert', 16);
+    $totalCount = array_sum(array_map(
+        fn($category) => count($category['documents']),
+        $documentTypesByCategory
+    ));
+
+    $tabsHtml = renderCategoryTab('all', 'All', $totalCount, true);
+    $groupsHtml = '';
+    foreach ($documentTypesByCategory as $category) {
+        $tabsHtml .= renderCategoryTab(
+            $category['id'],
+            $category['tabLabel'],
+            count($category['documents']),
+            false
+        );
+        $groupsHtml .= renderDocumentGroup($category);
+    }
+
+    return <<<HTML
+        <div class="catalog" id="catalog">
+            <div class="catalog-toolbar">
+                <div class="search-box catalog-search">
+                    $searchIcon
+                    <input id="catalog-search" type="search"
+                        autocomplete="off" aria-label="Search documents"
+                        placeholder="Search $totalCount documents, like OJT or good moral">
+                    <button class="catalog-search-clear" id="catalog-search-clear"
+                        type="button" aria-label="Clear search" hidden>
+                        $closeIcon
+                    </button>
+                </div>
+                <div class="category-tabs" role="group"
+                    aria-label="Filter by category">
+                    $tabsHtml
+                </div>
+            </div>
+            <p class="field-hint catalog-count" id="catalog-count"
+                aria-live="polite"></p>
+            <p class="field-error" id="catalog-error" hidden>
+                {$alertIcon}<span></span>
+            </p>
+            <div class="document-groups" id="document-groups">
+                $groupsHtml
+            </div>
+            <div class="catalog-empty" id="catalog-empty" hidden>
+                <span class="icon-container icon-container-large">
+                    $searchIcon
+                </span>
+                <b>No documents match</b>
+                <p class="text-muted">
+                    Try a shorter word, or choose Others to describe what
+                    you need.
+                </p>
+                <button class="button button-secondary" id="catalog-reset"
+                    type="button">Clear search and filters</button>
+            </div>
+        </div>
         HTML;
 }
 

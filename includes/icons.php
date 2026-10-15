@@ -34,13 +34,35 @@ const ICON_PATHS = [
         '<path d="M15 18l-6-6 6-6"/>',
     'chevronRight' =>
         '<path d="M9 18l6-6-6-6"/>',
+    'file' =>
+        '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>' .
+        '<path d="M14 3v5h5M9 13h6M9 17h6"/>',
+    'check' =>
+        '<path d="M20 6L9 17l-5-5"/>',
+    'plus' =>
+        '<path d="M12 5v14M5 12h14"/>',
+    'close' =>
+        '<path d="M18 6L6 18M6 6l12 12"/>',
+    'minus' =>
+        '<path d="M5 12h14"/>',
+    'alert' =>
+        '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>',
+    'clock' =>
+        '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    'shield' =>
+        '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' .
+        '<path d="M9 12l2 2 4-4"/>',
+    'cash' =>
+        '<rect x="2" y="6" width="20" height="12" rx="2"/>' .
+        '<circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
 ];
 
-function renderIcon(string $iconName): string
+function renderIcon(string $iconName, int $size = 22): string
 {
     $paths = ICON_PATHS[$iconName];
 
-    return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" ' .
+    return '<svg viewBox="0 0 24 24" width="' . $size . '" height="' . $size .
+        '" fill="none" ' .
         'stroke="currentColor" stroke-width="1.9" stroke-linecap="round" ' .
         'stroke-linejoin="round">' . $paths . '</svg>';
 }

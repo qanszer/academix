@@ -17,102 +17,18 @@ $userDisplayNameByRole = [
 
 const MAX_COPIES_PER_REQUEST = 10;
 
-const REQUIREMENT_NOTE_UPLOAD = 'Upload as PDF, JPG or PNG';
-const REQUIREMENT_NOTE_IN_PERSON = 'Submit in person at the Registrar';
-const REQUIREMENT_NOTE_SHOW_ID = 'Show it when you pick up the document';
+// Sample figure shown next to the submit button as social proof.
+const REQUESTS_RELEASED_THIS_TERM = 68;
 
-$documentTypes = [
-    [
-        'name' => 'Good Moral Certificate',
-        'fee' => 150,
-        'allowsUpload' => false,
-        'requirements' => [
-            [
-                'label' => 'Valid school ID',
-                'note' => REQUIREMENT_NOTE_SHOW_ID,
-            ],
-            [
-                'label' => 'No unresolved violation',
-                'note' => 'Checked by the Registrar',
-            ],
-        ],
-    ],
-    [
-        'name' => 'Transcript of Records',
-        'fee' => 300,
-        'allowsUpload' => true,
-        'requirements' => [
-            [
-                'label' => 'Request letter',
-                'note' => REQUIREMENT_NOTE_UPLOAD,
-            ],
-            [
-                'label' => 'Valid ID',
-                'note' => REQUIREMENT_NOTE_UPLOAD,
-            ],
-            [
-                'label' => 'Original clearance form',
-                'note' => REQUIREMENT_NOTE_IN_PERSON,
-            ],
-        ],
-    ],
-    [
-        'name' => 'True Copy of Grades',
-        'fee' => 100,
-        'allowsUpload' => false,
-        'requirements' => [
-            [
-                'label' => 'Valid school ID',
-                'note' => REQUIREMENT_NOTE_SHOW_ID,
-            ],
-            [
-                'label' => 'No outstanding balance',
-                'note' => 'Checked by the Cashier',
-            ],
-        ],
-    ],
-    [
-        'name' => 'Scholarship-related document',
-        'fee' => 0,
-        'allowsUpload' => true,
-        'requirements' => [
-            [
-                'label' => 'Request letter',
-                'note' => REQUIREMENT_NOTE_UPLOAD,
-            ],
-            [
-                'label' => 'Valid ID',
-                'note' => REQUIREMENT_NOTE_UPLOAD,
-            ],
-            [
-                'label' => 'Scholarship notice or grant letter',
-                'note' => REQUIREMENT_NOTE_UPLOAD,
-            ],
-        ],
-    ],
-    [
-        'name' => 'Other',
-        'fee' => 0,
-        'allowsUpload' => false,
-        'requirements' => [
-            [
-                'label' => 'Description of the document',
-                'note' => 'Describe it in the field above',
-            ],
-            [
-                'label' => 'Valid school ID',
-                'note' => REQUIREMENT_NOTE_SHOW_ID,
-            ],
-        ],
-    ],
-];
+const PURPOSE_SUGGESTIONS = ['Employment', 'Scholarship', 'Transfer'];
 
 $allRequests = [
     [
         'requestId' => 'AX-1048',
         'studentName' => 'Juan Dela Cruz',
         'studentId' => '2021-00123',
-        'documentType' => 'Transcript of Records',
+        'documentType' =>
+            'Transcript of Records - For Employment OTR (Undergraduate)',
         'requestedDate' => 'Oct 08, 2026',
         'status' => STATUS_UNDER_REVIEW,
         'releaseStatus' => RELEASE_NOT_APPLICABLE,
@@ -123,7 +39,7 @@ $allRequests = [
         'requestId' => 'AX-1042',
         'studentName' => 'Juan Dela Cruz',
         'studentId' => '2021-00123',
-        'documentType' => 'Good Moral Certificate',
+        'documentType' => 'Certificate of Good Moral Character',
         'requestedDate' => 'Oct 06, 2026',
         'status' => STATUS_NEEDS_CORRECTION,
         'releaseStatus' => RELEASE_NOT_APPLICABLE,
@@ -145,7 +61,7 @@ $allRequests = [
         'requestId' => 'AX-1007',
         'studentName' => 'Juan Dela Cruz',
         'studentId' => '2021-00123',
-        'documentType' => 'Scholarship-related document',
+        'documentType' => 'Transcript of Records - For Scholarship Application',
         'requestedDate' => 'Sep 20, 2026',
         'status' => STATUS_COMPLETED,
         'releaseStatus' => RELEASE_PICKED_UP,
@@ -156,7 +72,7 @@ $allRequests = [
         'requestId' => 'AX-1050',
         'studentName' => 'Ana Reyes',
         'studentId' => '2020-00871',
-        'documentType' => 'Transcript of Records',
+        'documentType' => 'Transcript of Records - For Evaluation',
         'requestedDate' => 'Oct 09, 2026',
         'status' => STATUS_SUBMITTED,
         'releaseStatus' => RELEASE_NOT_APPLICABLE,
@@ -167,7 +83,7 @@ $allRequests = [
         'requestId' => 'AX-1049',
         'studentName' => 'Carlo Mendoza',
         'studentId' => '2022-01544',
-        'documentType' => 'Good Moral Certificate',
+        'documentType' => 'Certificate of Good Moral Character',
         'requestedDate' => 'Oct 08, 2026',
         'status' => STATUS_PROCESSING,
         'releaseStatus' => RELEASE_NOT_APPLICABLE,
@@ -178,7 +94,7 @@ $allRequests = [
         'requestId' => 'AX-1045',
         'studentName' => 'Bea Navarro',
         'studentId' => '2019-00322',
-        'documentType' => 'Other',
+        'documentType' => 'Certificate of Registration (Certified True Copy)',
         'requestedDate' => 'Oct 07, 2026',
         'status' => STATUS_APPROVED_CLEARED,
         'releaseStatus' => RELEASE_FOR_PICKUP,
@@ -234,7 +150,7 @@ function buildDemoRequirements(string $status): array
     return $requirements;
 }
 
-$feeByDocumentType = array_column($documentTypes, 'fee', 'name');
+$feeByDocumentType = array_column($documentTypes, 'fee', 'label');
 
 // Requests not listed here are for a single copy.
 $copiesByRequestId = [
