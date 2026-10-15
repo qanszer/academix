@@ -19,6 +19,10 @@ require __DIR__ . '/../includes/header.php';
         <label id="other-document-field" hidden>Which document do you need?
             <input class="form-control" placeholder="Describe the document">
         </label>
+        <label>Number of copies (1 to <?= MAX_COPIES_PER_REQUEST ?>)
+            <input class="form-control" id="copies-input" type="number"
+                min="1" max="<?= MAX_COPIES_PER_REQUEST ?>" value="1" required>
+        </label>
         <label>Purpose of request
             <input class="form-control" required
                 placeholder="Employment, scholarship, transfer">
@@ -26,16 +30,8 @@ require __DIR__ . '/../includes/header.php';
         <label>Supporting information
             <textarea class="form-control" rows="3"></textarea>
         </label>
-        <label>Preferred release method
-            <select class="form-control">
-                <option>On-site pickup</option>
-                <option disabled>Delivery (coming soon)</option>
-            </select>
-        </label>
-    </div>
-    <div class="card">
-        <h3>Requirements</h3>
         <div id="upload-section">
+            <h3>Upload files</h3>
             <label class="upload-dropzone">Click to upload files
                 <input type="file" id="file-input" multiple hidden>
             </label>
@@ -48,8 +44,20 @@ require __DIR__ . '/../includes/header.php';
         <p class="text-muted form-note" id="no-upload-notice">
             No upload needed. Staff will tell you if anything else is required.
         </p>
+        <label>Preferred release method
+            <select class="form-control">
+                <option>On-site pickup</option>
+                <option disabled>Delivery (coming soon)</option>
+            </select>
+        </label>
+    </div>
+    <div class="card">
+        <h3>Requirements</h3>
+        <ul class="requirement-list new-request-requirements"
+            id="requirements-list"></ul>
         <h3>Fee</h3>
         <h2 id="fee-amount"></h2>
+        <p class="text-muted" id="fee-breakdown" hidden></p>
         <p class="text-muted form-note">
             Payment is recorded by the Cashier. No online payment.
         </p>

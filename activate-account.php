@@ -17,17 +17,22 @@ $basePath = '';
         <?= renderRoleTabs([
             ROLE_STUDENT => 'Student',
             ROLE_STAFF => 'Employee',
+            ROLE_ALUMNI => 'Alumni',
         ]) ?>
         <div class="activation-step" id="activation-step-1">
-            <label>Student or employee ID
+            <label>
+                <span data-alumni-text="Student ID">Student or employee ID</span>
                 <input class="form-control" id="user-id-input"
                     value="<?= $currentStudent['studentId'] ?>">
             </label>
-            <label>Registered email
+            <label>
+                <span data-alumni-text="Any active email">Registered email</span>
                 <input class="form-control" type="email"
-                    placeholder="Email on file with the university">
+                    placeholder="Email on file with the university"
+                    data-alumni-placeholder="Any email you can access">
             </label>
-            <p class="text-muted form-note">
+            <p class="text-muted form-note"
+                data-alumni-text="Your university email has expired, so use any email you can access. We send a code to verify it.">
                 An ID alone is not enough. We send a code to the email on file.
             </p>
             <button class="button" data-next-step="2">Send code</button>
@@ -37,7 +42,13 @@ $basePath = '';
                 <input class="form-control" maxlength="6"
                     placeholder="Any 6 digits in this demo">
             </label>
-            <button class="button" data-next-step="3">Verify code</button>
+            <p class="text-muted form-note" data-alumni-only hidden>
+                After verification, your login ID and password are sent to
+                this email.
+            </p>
+            <button class="button" data-next-step="3"
+                data-alumni-next-step="done"
+                data-alumni-text="Verify and send login details">Verify code</button>
         </div>
         <div class="activation-step" id="activation-step-3" hidden>
             <label>New password

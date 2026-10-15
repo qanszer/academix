@@ -4,6 +4,10 @@ const ROLE_STUDENT = 'student';
 const ROLE_STAFF = 'staff';
 const ROLE_ADMIN = 'admin';
 
+// Alumni activate their account as a separate account type, but they sign in
+// through the student portal. They have no landing page or label of their own.
+const ROLE_ALUMNI = 'alumni';
+
 const ROLE_LABELS = [
     ROLE_STUDENT => 'Student',
     ROLE_STAFF => 'Registrar office',
@@ -20,4 +24,5 @@ const DEMO_USER_ID_BY_ROLE = [
     ROLE_STUDENT => '2021-00123',
     ROLE_STAFF => 'EMP-0101',
     ROLE_ADMIN => 'ADMIN-01',
+    ROLE_ALUMNI => '2018-00456',
 ];

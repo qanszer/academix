@@ -1013,6 +1013,10 @@ h3.detail-section-title {
     flex-direction: column;
 }
 
+.new-request-requirements {
+    margin-bottom: var(--space-5);
+}
+
 .file-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1123,6 +1127,11 @@ h3.detail-section-title {
 .auth-prompt {
     margin-top: 14px;
     text-align: center;
+}
+
+.forgot-password-link {
+    margin: -8px 0 16px;
+    text-align: right;
 }
 
 .role-tabs {

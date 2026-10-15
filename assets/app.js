@@ -10,6 +10,7 @@ const LATENCY_RANGE_MS = 40;
 const ROLE = Object.freeze({
     STUDENT: "student",
     STAFF: "staff",
+    ALUMNI: "alumni",
 });
 
 const STATUS = Object.freeze({
@@ -98,6 +99,9 @@ const FILE_UPLOAD_STATUSES = [
 
 const FILE_PICKER_MESSAGE = "File picker opens here";
 const FILE_PREVIEW_MESSAGE = "Preview opens here";
+const ALUMNI_ACTIVATED_MESSAGE =
+    "Account activated. Login details sent to your email";
+const RESET_LINK_RESENT_MESSAGE = "Reset link sent again";
 
 const BLOCKING_ISSUES = [
     "Outstanding balance",
@@ -198,6 +202,11 @@ function initDefaultUserIdAutofill() {
     });
 }
 
+function isAlumniSelected() {
+    const alumniRadio = selectOne(`[name=role][value="${ROLE.ALUMNI}"]`);
+    return Boolean(alumniRadio && alumniRadio.checked);
+}
+
 function showActivationStep(step) {
     selectAll(".activation-step").forEach((section) => {
         section.hidden = section.id !== `activation-step-${step}`;
@@ -205,8 +214,23 @@ function showActivationStep(step) {
 }
 
 function finishActivation() {
-    showToast("Account activated");
-    setTimeout(() => (location.href = "index.php"), REDIRECT_DELAY_MS);
+    const isAlumni = isAlumniSelected();
+
+    showToast(isAlumni ? ALUMNI_ACTIVATED_MESSAGE : "Account activated");
+    setTimeout(
+        () => (location.href = "index.php"),
+        isAlumni ? TOAST_DURATION_MS : REDIRECT_DELAY_MS,
+    );
+}
+
+function getActivationNextStep(button) {
+    // Alumni receive their login details by email, so they skip the step
+    // where students choose their own password.
+    const useAlumniStep = isAlumniSelected() && button.dataset.alumniNextStep;
+
+    return useAlumniStep
+        ? button.dataset.alumniNextStep
+        : button.dataset.nextStep;
 }
 
 function initActivationFlow() {
@@ -214,10 +238,78 @@ function initActivationFlow() {
         button.addEventListener("click", (event) => {
             event.preventDefault();
 
-            const nextStep = button.dataset.nextStep;
+            const nextStep = getActivationNextStep(button);
             if (nextStep === "done") finishActivation();
             else showActivationStep(nextStep);
         });
+    });
+}
+
+function applyAlumniActivationCopy() {
+    const isAlumni = isAlumniSelected();
+
+    selectAll("[data-alumni-text]").forEach((element) => {
+        // Remember the original copy so switching tabs restores it.
+        if (!("defaultText" in element.dataset)) {
+            element.dataset.defaultText = element.textContent.trim();
+        }
+        element.textContent = isAlumni
+            ? element.dataset.alumniText
+            : element.dataset.defaultText;
+    });
+
+    selectAll("[data-alumni-placeholder]").forEach((input) => {
+        if (!("defaultPlaceholder" in input.dataset)) {
+            input.dataset.defaultPlaceholder = input.placeholder;
+        }
+        input.placeholder = isAlumni
+            ? input.dataset.alumniPlaceholder
+            : input.dataset.defaultPlaceholder;
+    });
+
+    selectAll("[data-alumni-only]").forEach((element) => {
+        element.hidden = !isAlumni;
+    });
+}
+
+function initAlumniActivation() {
+    if (!selectOne(".activation-step")) return;
+
+    applyAlumniActivationCopy();
+
+    selectAll("[name=role]").forEach((roleRadio) => {
+        roleRadio.addEventListener("change", () => {
+            applyAlumniActivationCopy();
+            showActivationStep(1);
+        });
+    });
+}
+
+function maskEmail(email) {
+    const atIndex = email.lastIndexOf("@");
+    return `${email.charAt(0)}***${email.slice(atIndex)}`;
+}
+
+function initForgotPasswordFlow() {
+    const forgotPasswordForm = selectOne("#forgot-password-form");
+    if (!forgotPasswordForm) return;
+
+    const emailInput = selectOne("#reset-email-input");
+
+    // A submit handler (not a click handler) so the browser validates the
+    // required fields first and pressing Enter also sends the link.
+    forgotPasswordForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        selectOne("#reset-email-display").textContent = maskEmail(
+            emailInput.value.trim(),
+        );
+        selectOne("#forgot-step-request").hidden = true;
+        selectOne("#forgot-step-sent").hidden = false;
+    });
+
+    selectOne("#resend-reset-link-button").addEventListener("click", () => {
+        showToast(RESET_LINK_RESENT_MESSAGE);
     });
 }
 
@@ -251,29 +343,72 @@ function initIntegrationActions() {
     });
 }
 
+function renderDocumentRequirementRow(requirement) {
+    return `
+        <li class="requirement-row">
+            <span class="icon-container">${DOCUMENT_ICON}</span>
+            <span class="requirement-text">
+                <b>${requirement.label}</b>
+                <small class="text-muted">${requirement.note}</small>
+            </span>
+        </li>`;
+}
+
 function initRequestForm() {
     const requestForm = selectOne("#request-form");
     if (!requestForm) return;
 
     const documentTypeSelect = selectOne("#document-type-select");
+    const copiesInput = selectOne("#copies-input");
     const fileInput = selectOne("#file-input");
+
+    function getCopies() {
+        const minCopies = Number(copiesInput.min);
+        const maxCopies = Number(copiesInput.max);
+        const copies = Math.floor(Number(copiesInput.value));
+
+        // Blank or out-of-range input falls back to the nearest valid number
+        // so the fee never shows NaN while the student is typing.
+        if (!(copies >= minCopies)) return minCopies;
+        return Math.min(copies, maxCopies);
+    }
+
+    function updateFee() {
+        const selectedOption = documentTypeSelect.selectedOptions[0];
+        const fee = Number(selectedOption.dataset.fee);
+        const copies = getCopies();
+        const feeBreakdown = selectOne("#fee-breakdown");
+
+        selectOne("#fee-amount").textContent = formatFee(fee * copies);
+        feeBreakdown.textContent = `${formatFee(fee)} × ${copies} copies`;
+        feeBreakdown.hidden = !(fee > 0 && copies > 1);
+    }
+
+    function updateRequirements(selectedOption) {
+        const requirements = JSON.parse(selectedOption.dataset.requirements);
+
+        selectOne("#requirements-list").innerHTML = requirements
+            .map(renderDocumentRequirementRow)
+            .join("");
+    }
 
     function updateFormForSelectedDocumentType() {
         const selectedOption = documentTypeSelect.selectedOptions[0];
         const allowsUpload = selectedOption.dataset.allowsUpload === "true";
-        const fee = Number(selectedOption.dataset.fee);
 
         selectOne("#other-document-field").hidden =
             selectedOption.text !== OTHER_DOCUMENT_TYPE;
         selectOne("#upload-section").hidden = !allowsUpload;
         selectOne("#no-upload-notice").hidden = allowsUpload;
-        selectOne("#fee-amount").textContent = fee > 0 ? `₱${fee}` : "No fee";
+        updateRequirements(selectedOption);
+        updateFee();
     }
 
     documentTypeSelect.addEventListener(
         "change",
         updateFormForSelectedDocumentType,
     );
+    copiesInput.addEventListener("input", updateFee);
     updateFormForSelectedDocumentType();
 
     fileInput.addEventListener("change", () => {
@@ -327,8 +462,12 @@ function renderStatusEvent(label) {
 }
 
 function renderInitialRequestMessage(request) {
+    const requestedDocument =
+        request.copies > 1
+            ? `${request.copies} copies of my ${request.documentType}`
+            : `my ${request.documentType}`;
     const text =
-        `Hello, I would like to request my ${request.documentType}. ` +
+        `Hello, I would like to request ${requestedDocument}. ` +
         `Purpose: ${request.purpose}. ` +
         "I attached my request letter and valid ID.";
     const studentCaption = isStaffView ? request.studentName : "You";
@@ -465,9 +604,19 @@ function renderDetailRow(label, valueHtml) {
     return `<dt>${label}</dt><dd>${valueHtml}</dd>`;
 }
 
+function renderCopiesValue(request) {
+    if (request.fee > 0 && request.copies > 1) {
+        const feePerCopy = formatFee(request.fee / request.copies);
+        return `${request.copies} <span class="text-muted">at ${feePerCopy} each</span>`;
+    }
+
+    return `${request.copies}`;
+}
+
 function renderRequestDetails(request) {
     const rows = [
         renderDetailRow("Purpose", request.purpose),
+        renderDetailRow("Copies", renderCopiesValue(request)),
         renderDetailRow("Release method", request.preferredRelease),
         renderDetailRow(
             "Release status",
@@ -914,6 +1063,8 @@ initLayoutControls();
 initToastTriggers();
 initDefaultUserIdAutofill();
 initActivationFlow();
+initAlumniActivation();
+initForgotPasswordFlow();
 initIntegrationActions();
 initRequestForm();
 initRequestWorkspace();

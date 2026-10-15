@@ -50,6 +50,11 @@ $basePath = '';
         <label>Password
             <input class="form-control" type="password" value="demo1234">
         </label>
+        <p class="forgot-password-link">
+            <a class="link-accent" href="forgot-password.php">
+                Forgot password?
+            </a>
+        </p>
         <button class="button button-full-width">Log in</button>
         <p class="text-muted auth-prompt">
             First time here?

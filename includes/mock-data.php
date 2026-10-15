@@ -15,31 +15,95 @@ $userDisplayNameByRole = [
     ROLE_ADMIN => 'System Admin',
 ];
 
+const MAX_COPIES_PER_REQUEST = 10;
+
+const REQUIREMENT_NOTE_UPLOAD = 'Upload as PDF, JPG or PNG';
+const REQUIREMENT_NOTE_IN_PERSON = 'Submit in person at the Registrar';
+const REQUIREMENT_NOTE_SHOW_ID = 'Show it when you pick up the document';
+
 $documentTypes = [
     [
         'name' => 'Good Moral Certificate',
         'fee' => 150,
         'allowsUpload' => false,
+        'requirements' => [
+            [
+                'label' => 'Valid school ID',
+                'note' => REQUIREMENT_NOTE_SHOW_ID,
+            ],
+            [
+                'label' => 'No unresolved violation',
+                'note' => 'Checked by the Registrar',
+            ],
+        ],
     ],
     [
         'name' => 'Transcript of Records',
         'fee' => 300,
         'allowsUpload' => true,
+        'requirements' => [
+            [
+                'label' => 'Request letter',
+                'note' => REQUIREMENT_NOTE_UPLOAD,
+            ],
+            [
+                'label' => 'Valid ID',
+                'note' => REQUIREMENT_NOTE_UPLOAD,
+            ],
+            [
+                'label' => 'Original clearance form',
+                'note' => REQUIREMENT_NOTE_IN_PERSON,
+            ],
+        ],
     ],
     [
         'name' => 'True Copy of Grades',
         'fee' => 100,
         'allowsUpload' => false,
+        'requirements' => [
+            [
+                'label' => 'Valid school ID',
+                'note' => REQUIREMENT_NOTE_SHOW_ID,
+            ],
+            [
+                'label' => 'No outstanding balance',
+                'note' => 'Checked by the Cashier',
+            ],
+        ],
     ],
     [
         'name' => 'Scholarship-related document',
         'fee' => 0,
         'allowsUpload' => true,
+        'requirements' => [
+            [
+                'label' => 'Request letter',
+                'note' => REQUIREMENT_NOTE_UPLOAD,
+            ],
+            [
+                'label' => 'Valid ID',
+                'note' => REQUIREMENT_NOTE_UPLOAD,
+            ],
+            [
+                'label' => 'Scholarship notice or grant letter',
+                'note' => REQUIREMENT_NOTE_UPLOAD,
+            ],
+        ],
     ],
     [
         'name' => 'Other',
         'fee' => 0,
         'allowsUpload' => false,
+        'requirements' => [
+            [
+                'label' => 'Description of the document',
+                'note' => 'Describe it in the field above',
+            ],
+            [
+                'label' => 'Valid school ID',
+                'note' => REQUIREMENT_NOTE_SHOW_ID,
+            ],
+        ],
     ],
 ];
 
@@ -172,15 +236,26 @@ function buildDemoRequirements(string $status): array
 
 $feeByDocumentType = array_column($documentTypes, 'fee', 'name');
 
+// Requests not listed here are for a single copy.
+$copiesByRequestId = [
+    'AX-1048' => 2,
+    'AX-1031' => 3,
+    'AX-1050' => 5,
+];
+
 $allRequests = array_map(
-    function (array $request) use ($feeByDocumentType) {
+    function (array $request) use ($feeByDocumentType, $copiesByRequestId) {
         $requestNumber = (int) substr($request['requestId'], strlen('AX-'));
         $purpose = DEMO_PURPOSES[$requestNumber % count(DEMO_PURPOSES)];
         $requestTime =
             DEMO_REQUEST_TIMES[$requestNumber % count(DEMO_REQUEST_TIMES)];
 
+        $copies = $copiesByRequestId[$request['requestId']] ?? 1;
+        $feePerCopy = $feeByDocumentType[$request['documentType']] ?? 0;
+
         return $request + [
-            'fee' => $feeByDocumentType[$request['documentType']] ?? 0,
+            'copies' => $copies,
+            'fee' => $feePerCopy * $copies,
             'purpose' => $purpose,
             'requestedTime' => $requestTime,
             'preferredRelease' => DEFAULT_RELEASE_METHOD,

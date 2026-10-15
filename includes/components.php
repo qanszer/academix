@@ -36,10 +36,15 @@ function renderFeeInput(int $fee): string
 function renderDocumentTypeOption(array $documentType): string
 {
     $allowsUpload = $documentType['allowsUpload'] ? 'true' : 'false';
+    $requirementsJson = htmlspecialchars(
+        json_encode($documentType['requirements']),
+        ENT_QUOTES
+    );
 
     return <<<HTML
         <option data-fee="{$documentType['fee']}"
-            data-allows-upload="$allowsUpload">{$documentType['name']}</option>
+            data-allows-upload="$allowsUpload"
+            data-requirements="$requirementsJson">{$documentType['name']}</option>
         HTML;
 }
 
