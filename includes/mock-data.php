@@ -2,11 +2,11 @@
 
 $currentStudent = [
     'studentId' => DEMO_USER_ID_BY_ROLE[ROLE_STUDENT],
-    'name' => 'Juan Dela Cruz',
-    'email' => 'jua***@univ.edu.ph',
-    'program' => 'BS Computer Science',
+    'name' => 'Eldric Vincent Ponce',
+    'email' => 'eldr***@univ.edu.ph',
+    'program' => 'BS Information Technology',
     'yearLevel' => '3rd Year',
-    'status' => 'Regular',
+    'status' => 'Irregular',
 ];
 
 $userDisplayNameByRole = [
@@ -25,7 +25,7 @@ const PURPOSE_SUGGESTIONS = ['Employment', 'Scholarship', 'Transfer'];
 $allRequests = [
     [
         'requestId' => 'AX-1048',
-        'studentName' => 'Juan Dela Cruz',
+        'studentName' => 'Eldric Vincent Ponce',
         'studentId' => '2021-00123',
         'documentType' =>
             'Transcript of Records - For Employment OTR (Undergraduate)',
@@ -37,7 +37,7 @@ $allRequests = [
     ],
     [
         'requestId' => 'AX-1042',
-        'studentName' => 'Juan Dela Cruz',
+        'studentName' => 'Eldric Vincent Ponce',
         'studentId' => '2021-00123',
         'documentType' => 'Certificate of Good Moral Character',
         'requestedDate' => 'Oct 06, 2026',
@@ -48,7 +48,7 @@ $allRequests = [
     ],
     [
         'requestId' => 'AX-1031',
-        'studentName' => 'Juan Dela Cruz',
+        'studentName' => 'Eldric Vincent Ponce',
         'studentId' => '2021-00123',
         'documentType' => 'True Copy of Grades',
         'requestedDate' => 'Oct 01, 2026',
@@ -59,7 +59,7 @@ $allRequests = [
     ],
     [
         'requestId' => 'AX-1007',
-        'studentName' => 'Juan Dela Cruz',
+        'studentName' => 'Eldric Vincent Ponce',
         'studentId' => '2021-00123',
         'documentType' => 'Transcript of Records - For Scholarship Application',
         'requestedDate' => 'Sep 20, 2026',
