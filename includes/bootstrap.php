@@ -8,4 +8,5 @@ require __DIR__ . '/document-catalog.php';
 require __DIR__ . '/mock-data.php';
 require __DIR__ . '/icons.php';
 require __DIR__ . '/navigation.php';
+require __DIR__ . '/theme.php';
 require __DIR__ . '/components.php';

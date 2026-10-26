@@ -1,0 +1,36 @@
+{
+    "light": {
+        "accent": "#12307a",
+        "text-color-accent": "#ffffff",
+        "background": "#ffffff",
+        "panel-surface": "#ffffff",
+        "tonal-surface": "#f3f5f9",
+        "text-color-main": "#0f1730",
+        "text-color-body": "#2b3550",
+        "text-color-muted": "#667088",
+        "color-danger": "#b3261e",
+        "pill-default-bg": "#e5e8f0",
+        "pill-default-text": "#12307a",
+        "pill-attention-bg": "#12307a",
+        "pill-attention-text": "#ffffff",
+        "pill-muted-bg": "#f3f5f9",
+        "pill-muted-text": "#667088"
+    },
+    "dark": {
+        "accent": "#8ea8ff",
+        "text-color-accent": "#0a1030",
+        "background": "#080b17",
+        "panel-surface": "#080b17",
+        "tonal-surface": "#0b0f1f",
+        "text-color-main": "#e8ebf7",
+        "text-color-body": "#c9cfe6",
+        "text-color-muted": "#8a93b0",
+        "color-danger": "#ff9b92",
+        "pill-default-bg": "#202741",
+        "pill-default-text": "#8ea8ff",
+        "pill-attention-bg": "#8ea8ff",
+        "pill-attention-text": "#0a1030",
+        "pill-muted-bg": "#0b0f1f",
+        "pill-muted-text": "#8a93b0"
+    }
+}

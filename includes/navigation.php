@@ -43,6 +43,12 @@ const NAVIGATION_LINKS_BY_ROLE = [
             'group' => 'Configuration',
         ],
         [
+            'page' => 'appearance',
+            'label' => 'Appearance',
+            'icon' => 'palette',
+            'group' => 'Configuration',
+        ],
+        [
             'page' => 'settings',
             'label' => 'Settings',
             'icon' => 'sliders',

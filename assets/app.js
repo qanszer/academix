@@ -124,7 +124,8 @@ const rootElement = document.documentElement;
 const userRole = document.body.dataset.role;
 const isStaffView = userRole === ROLE.STAFF;
 
-const selectOne = (selector) => document.querySelector(selector);
+const selectOne = (selector, scope = document) =>
+    scope.querySelector(selector);
 const selectAll = (selector) => [...document.querySelectorAll(selector)];
 
 const createIcon = (paths) =>
@@ -1527,6 +1528,117 @@ function initRequestWorkspace() {
     selectInitialListItem(listItems);
 }
 
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
+const MIN_TEXT_CONTRAST = 4.5;
+const DERIVED_ALPHA_BY_MODE = Object.freeze({
+    light: { "tint-accent": "1c", "divider-color": "14" },
+    dark: { "tint-accent": "2e", "divider-color": "1f" },
+});
+
+function normalizeHexColor(value) {
+    let hex = value.trim().toLowerCase().replace(/^#/, "");
+    if (/^[0-9a-f]{3}$/.test(hex)) {
+        hex = [...hex].map((digit) => digit + digit).join("");
+    }
+    return `#${hex}`.match(HEX_COLOR_PATTERN) ? `#${hex}` : null;
+}
+
+function getRelativeLuminance(hex) {
+    const [red, green, blue] = [1, 3, 5].map((start) => {
+        const channel = parseInt(hex.slice(start, start + 2), 16) / 255;
+        return channel <= 0.03928
+            ? channel / 12.92
+            : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+function getContrastRatio(firstHex, secondHex) {
+    const luminances = [firstHex, secondHex].map(getRelativeLuminance);
+    const lighter = Math.max(...luminances);
+    const darker = Math.min(...luminances);
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+function initThemeEditor(editor) {
+    const mode = editor.dataset.mode;
+    const preview = selectOne(".theme-preview", editor);
+    const fields = [...editor.querySelectorAll(".color-field")];
+
+    const fieldFor = (token) =>
+        fields.find((field) => field.dataset.token === token);
+    const hexInputOf = (field) => field.querySelector(".color-hex");
+    const swatchOf = (field) => field.querySelector(".color-swatch");
+
+    const readColor = (token) => {
+        const field = fieldFor(token);
+        return normalizeHexColor(hexInputOf(field).value) || swatchOf(field).value;
+    };
+
+    function updateContrastBadges() {
+        fields.forEach((field) => {
+            const againstToken = field.dataset.against;
+            const badge = field.querySelector(".contrast-badge");
+            if (!againstToken || !badge) return;
+
+            const ratio = getContrastRatio(
+                readColor(field.dataset.token),
+                readColor(againstToken),
+            );
+            const isLow = ratio < MIN_TEXT_CONTRAST;
+            badge.textContent = `${isLow ? "Low " : ""}${ratio.toFixed(1)}:1`;
+            badge.title = `Contrast against ${againstToken.replace(/-/g, " ")}`;
+            badge.classList.toggle("contrast-badge-low", isLow);
+        });
+    }
+
+    function applyToPreview(token, color) {
+        preview.style.setProperty(`--${token}`, color);
+        if (token !== "accent") return;
+
+        Object.entries(DERIVED_ALPHA_BY_MODE[mode]).forEach(([name, alpha]) => {
+            preview.style.setProperty(`--${name}`, color + alpha);
+        });
+    }
+
+    fields.forEach((field) => {
+        const token = field.dataset.token;
+        const hexInput = hexInputOf(field);
+        const swatch = swatchOf(field);
+
+        hexInput.addEventListener("input", () => {
+            const color = normalizeHexColor(hexInput.value);
+            hexInput.setAttribute("aria-invalid", color ? "false" : "true");
+            if (!color) return;
+
+            swatch.value = color;
+            applyToPreview(token, color);
+            updateContrastBadges();
+        });
+
+        hexInput.addEventListener("blur", () => {
+            hexInput.value = normalizeHexColor(hexInput.value) || swatch.value;
+            hexInput.setAttribute("aria-invalid", "false");
+        });
+
+        swatch.addEventListener("input", () => {
+            hexInput.value = swatch.value;
+            hexInput.dispatchEvent(new Event("input"));
+        });
+    });
+
+    updateContrastBadges();
+}
+
+function initAppearanceEditor() {
+    selectAll(".theme-editor").forEach(initThemeEditor);
+}
+
+function initFlashMessage() {
+    const flash = selectOne("[data-flash-message]");
+    if (flash) showToast(flash.dataset.flashMessage);
+}
+
 initLayoutControls();
 initToastTriggers();
 initDefaultUserIdAutofill();
@@ -1536,3 +1648,5 @@ initForgotPasswordFlow();
 initIntegrationActions();
 initRequestForm();
 initRequestWorkspace();
+initAppearanceEditor();
+initFlashMessage();

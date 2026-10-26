@@ -368,3 +368,100 @@ function renderRequestWorkspace(array $requests, string $viewerRole): string
         </div>
         HTML;
 }
+
+function renderColorField(
+    string $mode,
+    string $key,
+    array $meta,
+    string $value
+): string {
+    $id = "$mode-$key";
+    $label = escapeAttribute($meta['label']);
+    $hasContrast = isset($meta['against']);
+    $againstAttribute = $hasContrast
+        ? ' data-against="' . escapeAttribute($meta['against']) . '"'
+        : '';
+    $badge = $hasContrast ? '<span class="contrast-badge"></span>' : '';
+
+    return <<<HTML
+        <div class="color-field" data-token="$key"$againstAttribute>
+            <label for="$id">$label</label>
+            $badge
+            <span class="color-field-inputs">
+                <input class="color-swatch" type="color" value="$value"
+                    aria-label="$label picker">
+                <input class="form-control color-hex" id="$id"
+                    name="{$mode}[{$key}]" value="$value" maxlength="7"
+                    pattern="#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})"
+                    spellcheck="false" autocomplete="off">
+            </span>
+        </div>
+        HTML;
+}
+
+function renderThemePreview(string $variables): string
+{
+    $style = escapeAttribute($variables);
+
+    return <<<HTML
+        <div class="theme-preview" style="$style" aria-hidden="true">
+            <div class="theme-preview-sidebar">
+                <b class="brand-logo">A</b>
+                <span class="theme-preview-nav theme-preview-nav-active">
+                    Home
+                </span>
+                <span class="theme-preview-nav">Requests</span>
+            </div>
+            <div class="theme-preview-main">
+                <b>Transcript of Records</b>
+                <p class="theme-preview-body">
+                    Your request is being reviewed.
+                </p>
+                <p class="theme-preview-muted">Updated 2 hours ago</p>
+                <span class="theme-preview-pills">
+                    <span class="status-pill">Processing</span>
+                    <span class="status-pill status-pill-attention">Ready</span>
+                    <span class="status-pill status-pill-muted">Completed</span>
+                </span>
+                <span class="theme-preview-input">Search requests</span>
+                <span class="theme-preview-actions">
+                    <span class="button">Submit</span>
+                    <span class="button button-secondary">Cancel</span>
+                </span>
+                <p class="theme-preview-error">Missing requirement</p>
+            </div>
+        </div>
+        HTML;
+}
+
+function renderThemeEditor(
+    string $mode,
+    string $modeLabel,
+    array $colors
+): string {
+    $previewHtml = renderThemePreview(themeVariablesCss($colors, $mode));
+    $groupsHtml = '';
+
+    foreach (THEME_TOKEN_GROUPS as $groupName => $tokens) {
+        $fieldsHtml = '';
+
+        foreach ($tokens as $key => $meta) {
+            $fieldsHtml .= renderColorField($mode, $key, $meta, $colors[$key]);
+        }
+
+        $groupsHtml .= <<<HTML
+            <div class="theme-group">
+                <h4 class="theme-group-title">$groupName</h4>
+                $fieldsHtml
+            </div>
+            HTML;
+    }
+
+    return <<<HTML
+        <section class="card theme-editor" data-mode="$mode">
+            <h3>$modeLabel theme</h3>
+            $previewHtml
+            $groupsHtml
+        </section>
+        HTML;
+}

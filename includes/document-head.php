@@ -3,6 +3,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= $pageTitle ?> | Academix</title>
     <link rel="stylesheet" href="<?= $basePath ?>assets/style.css">
+    <?= renderThemeStyle() ?>
     <script>
         // Inline so the saved theme and sidebar state apply before the first
         // paint. Loading this from app.js would flash the default layout.
