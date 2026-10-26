@@ -63,6 +63,30 @@ const ICON_PATHS = [
     'cash' =>
         '<rect x="2" y="6" width="20" height="12" rx="2"/>' .
         '<circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+    'user' =>
+        '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' .
+        '<circle cx="12" cy="7" r="4"/>',
+    'lock' =>
+        '<rect x="4" y="11" width="16" height="10" rx="2"/>' .
+        '<path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    'eye' =>
+        '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>' .
+        '<circle cx="12" cy="12" r="3"/>',
+    'eyeOff' =>
+        '<path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.1-5.9"/>' .
+        '<path d="M9.9 4.2A9.7 9.7 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.2 3.2"/>' .
+        '<path d="M14.1 14.1a3 3 0 1 1-4.2-4.2M1 1l22 22"/>',
+    'camera' =>
+        '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>' .
+        '<circle cx="12" cy="13" r="4"/>',
+    'database' =>
+        '<ellipse cx="12" cy="5" rx="9" ry="3"/>' .
+        '<path d="M21 12c0 1.7-4 3-9 3s-9-1.3-9-3M3 5v14c0 1.7 4 3 9 3s9-1.3 9-3V5"/>',
+    'monitor' =>
+        '<rect x="2" y="3" width="20" height="14" rx="2"/>' .
+        '<path d="M8 21h8M12 17v4"/>',
+    'smartphone' =>
+        '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 18h.01"/>',
 ];
 
 function renderIcon(string $iconName, int $size = 22): string

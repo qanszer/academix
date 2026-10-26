@@ -8,6 +8,13 @@ if (($_SESSION['role'] ?? '') !== $requiredRole) {
 $basePath = '../';
 $userName = $userDisplayNameByRole[$requiredRole];
 $userRoleLabel = ROLE_LABELS[$requiredRole];
+$hasProfilePage = in_array($requiredRole, [ROLE_STUDENT, ROLE_STAFF], true);
+$userChipTag = $hasProfilePage ? 'a' : 'span';
+$userChipAttributes = $hasProfilePage
+    ? 'href="profile.php" title="Profile settings" '
+        . 'aria-label="Open profile settings"'
+        . ($currentPage === 'profile' ? ' aria-current="page"' : '')
+    : '';
 ?>
 <!doctype html>
 <html lang="en">
@@ -47,14 +54,16 @@ $userRoleLabel = ROLE_LABELS[$requiredRole];
                 title="Toggle theme">
                 <?= renderIcon('moon') ?>
             </button>
-            <span class="user-chip">
-                <span class="avatar"><?= getInitials($userName) ?></span>
+            <<?= $userChipTag ?> class="user-chip" <?= $userChipAttributes ?>>
+                <span class="avatar" data-profile-avatar>
+                    <?= getInitials($userName) ?>
+                </span>
                 <span class="user-chip-details">
                     <b class="user-chip-name"><?= $userName ?></b>
                     <small class="user-chip-role text-muted">
                         <?= $userRoleLabel ?>
                     </small>
                 </span>
-            </span>
+            </<?= $userChipTag ?>>
         </header>
         <main class="content">

@@ -155,6 +155,26 @@ function getInitials(text) {
     return wordInitials.slice(0, 2).join("").toUpperCase();
 }
 
+const PHOTO_STORAGE_PREFIX = "academix.photo.";
+const PROFILE_STORAGE_PREFIX = "academix.profile.";
+const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
+const PHOTO_OUTPUT_PX = 160;
+const PHOTO_OUTPUT_QUALITY = 0.85;
+const PHOTO_TYPES = ["image/png", "image/jpeg"];
+const MIN_PASSWORD_LENGTH = 8;
+const PASSWORD_STRENGTH_LABELS = ["Enter a new password", "Weak", "Fair", "Good", "Strong"];
+const PHONE_PATTERN = /^(\+63|0)9\d{9}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EYE_ICON = createIcon(
+    '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>' +
+        '<circle cx="12" cy="12" r="3"/>',
+);
+const EYE_OFF_ICON = createIcon(
+    '<path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.1-5.9"/>' +
+        '<path d="M9.9 4.2A9.7 9.7 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.2 3.2"/>' +
+        '<path d="M14.1 14.1a3 3 0 1 1-4.2-4.2M1 1l22 22"/>',
+);
+
 const HTML_ESCAPES = {
     "&": "&amp;",
     "<": "&lt;",
@@ -1639,6 +1659,412 @@ function initFlashMessage() {
     if (flash) showToast(flash.dataset.flashMessage);
 }
 
+// Profile settings
+
+function readStorage(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+function writeStorage(key, value) {
+    try {
+        if (value === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, value);
+    } catch {
+        // Storage can be full or blocked. The page still works without it.
+    }
+}
+
+function getPhotoStorageKey(userKey) {
+    return PHOTO_STORAGE_PREFIX + userKey;
+}
+
+function applyProfilePhoto(dataUrl) {
+    selectAll("[data-profile-avatar]").forEach((avatar) => {
+        avatar.classList.toggle("has-photo", Boolean(dataUrl));
+        avatar.style.backgroundImage = dataUrl ? `url("${dataUrl}")` : "";
+    });
+}
+
+function resizePhoto(file) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+
+        image.onload = () => {
+            const side = Math.min(image.width, image.height);
+            const canvas = document.createElement("canvas");
+            canvas.width = canvas.height = PHOTO_OUTPUT_PX;
+            canvas.getContext("2d").drawImage(
+                image,
+                (image.width - side) / 2,
+                (image.height - side) / 2,
+                side,
+                side,
+                0,
+                0,
+                PHOTO_OUTPUT_PX,
+                PHOTO_OUTPUT_PX,
+            );
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL("image/jpeg", PHOTO_OUTPUT_QUALITY));
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("Unreadable image"));
+        };
+        image.src = url;
+    });
+}
+
+function showInlineError(errorElement, message) {
+    errorElement.querySelector("span").textContent = message;
+    errorElement.hidden = false;
+}
+
+function setFieldError(input, message) {
+    const errorElement = selectOne(`#${input.id}-error`);
+    input.setAttribute("aria-invalid", message ? "true" : "false");
+    if (!errorElement) return;
+    if (message) showInlineError(errorElement, message);
+    else errorElement.hidden = true;
+}
+
+function initProfilePhoto(userKey) {
+    const photoInput = selectOne("#photo-input");
+    const changeButton = selectOne("#photo-change");
+    const removeButton = selectOne("#photo-remove");
+    const photoError = selectOne("#photo-error");
+    const storageKey = getPhotoStorageKey(userKey);
+
+    removeButton.hidden = !readStorage(storageKey);
+    changeButton.addEventListener("click", () => photoInput.click());
+
+    photoInput.addEventListener("change", async () => {
+        const [file] = photoInput.files;
+        photoInput.value = "";
+        if (!file) return;
+
+        photoError.hidden = true;
+        if (!PHOTO_TYPES.includes(file.type)) {
+            showInlineError(photoError, "Choose a JPG or PNG image.");
+            return;
+        }
+        if (file.size > PHOTO_MAX_BYTES) {
+            showInlineError(photoError, "Choose an image under 5 MB.");
+            return;
+        }
+
+        try {
+            const dataUrl = await resizePhoto(file);
+            writeStorage(storageKey, dataUrl);
+            applyProfilePhoto(dataUrl);
+            removeButton.hidden = false;
+            showToast("Photo updated");
+        } catch {
+            showInlineError(photoError, "That image could not be read.");
+        }
+    });
+
+    removeButton.addEventListener("click", () => {
+        writeStorage(storageKey, null);
+        applyProfilePhoto(null);
+        removeButton.hidden = true;
+        showToast("Photo removed");
+    });
+}
+
+function getFieldError(input) {
+    const value = input.value.trim();
+
+    if (!value) return "required" in input.dataset ? "Enter this detail." : "";
+
+    const validator = input.dataset.validate;
+    if (validator === "phone" && !PHONE_PATTERN.test(value.replace(/[\s-]/g, ""))) {
+        return "Use a PH mobile number, like 0917 123 4567.";
+    }
+    if (validator === "email" && !EMAIL_PATTERN.test(value)) {
+        return "Enter a valid email address.";
+    }
+    if (validator === "digits" && !/^\d+$/.test(value)) {
+        return "Use digits only.";
+    }
+    return "";
+}
+
+function initProfileForm(userKey) {
+    const form = selectOne("#profile-form");
+    const saveButton = selectOne("#profile-save");
+    const discardButton = selectOne("#profile-discard");
+    const dirtyNote = selectOne("#profile-dirty-note");
+    const fields = selectAll("[data-profile-field]");
+    const storageKey = PROFILE_STORAGE_PREFIX + userKey;
+
+    let savedValues = Object.fromEntries(
+        fields.map((field) => [field.name, field.value]),
+    );
+
+    try {
+        const stored = JSON.parse(readStorage(storageKey) || "{}");
+        fields.forEach((field) => {
+            if (typeof stored[field.name] === "string") {
+                field.value = stored[field.name];
+                savedValues[field.name] = field.value;
+            }
+        });
+    } catch {
+        // Ignore a corrupted saved profile and show the defaults.
+    }
+
+    function isDirty() {
+        return fields.some((field) => field.value !== savedValues[field.name]);
+    }
+
+    function syncDirtyState() {
+        const dirty = isDirty();
+        saveButton.disabled = !dirty;
+        discardButton.disabled = !dirty;
+        dirtyNote.textContent = dirty ? "Unsaved changes" : "";
+    }
+
+    fields.forEach((field) => {
+        field.addEventListener("input", () => {
+            if (field.getAttribute("aria-invalid") === "true") {
+                setFieldError(field, getFieldError(field));
+            }
+            syncDirtyState();
+        });
+        field.addEventListener("blur", () => {
+            setFieldError(field, getFieldError(field));
+        });
+    });
+
+    discardButton.addEventListener("click", () => {
+        fields.forEach((field) => {
+            field.value = savedValues[field.name];
+            setFieldError(field, "");
+        });
+        syncDirtyState();
+    });
+
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        const invalidFields = fields.filter((field) => {
+            const message = getFieldError(field);
+            setFieldError(field, message);
+            return message;
+        });
+        if (invalidFields.length) {
+            invalidFields[0].focus();
+            return;
+        }
+
+        fields.forEach((field) => {
+            field.value = field.value.trim();
+            savedValues[field.name] = field.value;
+        });
+        writeStorage(storageKey, JSON.stringify(savedValues));
+        syncDirtyState();
+        showToast("Profile saved");
+    });
+
+    syncDirtyState();
+}
+
+function getPasswordRules(newPassword, currentPassword) {
+    return {
+        length: newPassword.length >= MIN_PASSWORD_LENGTH,
+        case: /[a-z]/.test(newPassword) && /[A-Z]/.test(newPassword),
+        number: /\d/.test(newPassword),
+        different: newPassword !== "" && newPassword !== currentPassword,
+    };
+}
+
+function getPasswordStrength(newPassword, rules) {
+    if (!newPassword) return 0;
+
+    const passedRules = Object.values(rules).filter(Boolean).length;
+    const hasSymbol = /[^A-Za-z0-9]/.test(newPassword);
+    const isLong = newPassword.length >= 12;
+    const score = Math.min(passedRules - 1 + Number(hasSymbol || isLong), 4);
+
+    return Math.max(score, 1);
+}
+
+function initPasswordForm() {
+    const form = selectOne("#password-form");
+    const currentInput = selectOne("#current-password");
+    const newInput = selectOne("#new-password");
+    const confirmInput = selectOne("#confirm-password");
+    const strengthElement = selectOne("#password-strength");
+    const strengthLabel = selectOne("#strength-label");
+    const lastChanged = selectOne("#password-last-changed");
+
+    selectAll("[data-toggle-password]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const input = selectOne(`#${button.dataset.togglePassword}`);
+            const isHidden = input.type === "password";
+
+            input.type = isHidden ? "text" : "password";
+            button.innerHTML = isHidden ? EYE_OFF_ICON : EYE_ICON;
+            button.setAttribute("aria-pressed", String(isHidden));
+            button.setAttribute(
+                "aria-label",
+                isHidden ? "Hide password" : "Show password",
+            );
+        });
+    });
+
+    function updateRules() {
+        const rules = getPasswordRules(newInput.value, currentInput.value);
+        const strength = getPasswordStrength(newInput.value, rules);
+
+        selectAll("[data-rule]").forEach((item) => {
+            item.classList.toggle("met", rules[item.dataset.rule]);
+        });
+        strengthElement.dataset.level = strength;
+        strengthLabel.textContent = PASSWORD_STRENGTH_LABELS[strength];
+        return rules;
+    }
+
+    [currentInput, newInput, confirmInput].forEach((input) => {
+        input.addEventListener("input", () => {
+            updateRules();
+            if (input.getAttribute("aria-invalid") === "true") {
+                setFieldError(input, "");
+            }
+            if (input !== confirmInput && confirmInput.value) {
+                setFieldError(confirmInput, "");
+            }
+        });
+    });
+
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+
+        const rules = updateRules();
+        const errors = [
+            [currentInput, currentInput.value ? "" : "Enter your current password."],
+            [
+                newInput,
+                Object.values(rules).every(Boolean)
+                    ? ""
+                    : "Your new password does not meet every requirement.",
+            ],
+            [
+                confirmInput,
+                confirmInput.value === newInput.value
+                    ? ""
+                    : "The passwords do not match.",
+            ],
+        ];
+
+        errors.forEach(([input, message]) => setFieldError(input, message));
+        const firstError = errors.find(([, message]) => message);
+        if (firstError) {
+            firstError[0].focus();
+            return;
+        }
+
+        form.reset();
+        selectAll("[data-toggle-password]").forEach((button) => {
+            const input = selectOne(`#${button.dataset.togglePassword}`);
+            input.type = "password";
+            button.innerHTML = EYE_ICON;
+            button.setAttribute("aria-pressed", "false");
+            button.setAttribute("aria-label", "Show password");
+        });
+        updateRules();
+        lastChanged.textContent = "Last changed just now";
+        showToast("Password updated");
+    });
+}
+
+function initSessionList() {
+    const sessionList = selectOne("#session-list");
+    const endOthersButton = selectOne("#end-other-sessions");
+
+    function syncEndOthersButton() {
+        endOthersButton.disabled = !selectOne(
+            ".session-row:not([data-current-session])",
+            sessionList,
+        );
+    }
+
+    sessionList.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-end-session]");
+        if (!button) return;
+
+        button.closest(".session-row").remove();
+        syncEndOthersButton();
+        showToast("Device signed out");
+    });
+
+    endOthersButton.addEventListener("click", () => {
+        sessionList
+            .querySelectorAll(".session-row:not([data-current-session])")
+            .forEach((row) => row.remove());
+        syncEndOthersButton();
+        showToast("Signed out of other devices");
+    });
+
+    syncEndOthersButton();
+}
+
+function initSettingsSections() {
+    const content = selectOne("#settings-content");
+    const sections = selectAll("[data-settings-section]");
+    const links = selectAll("[data-settings-link]");
+    const sectionIds = sections.map((section) => section.dataset.settingsSection);
+
+    content.classList.add("settings-js");
+    selectOne("#profile-settings").classList.add("settings-js");
+
+    function showSection(id) {
+        const activeId = sectionIds.includes(id) ? id : sectionIds[0];
+
+        sections.forEach((section) => {
+            section.classList.toggle(
+                "active",
+                section.dataset.settingsSection === activeId,
+            );
+        });
+        links.forEach((link) => {
+            const isActive = link.dataset.settingsLink === activeId;
+            link.classList.toggle("active", isActive);
+            if (isActive) link.setAttribute("aria-current", "page");
+            else link.removeAttribute("aria-current");
+        });
+    }
+
+    window.addEventListener("hashchange", () => {
+        showSection(location.hash.slice(1));
+    });
+    showSection(location.hash.slice(1));
+}
+
+function initProfileSettings() {
+    const settings = selectOne("#profile-settings");
+    if (!settings) return;
+
+    initSettingsSections();
+    initProfilePhoto(userRole);
+    initProfileForm(userRole);
+    initPasswordForm();
+    initSessionList();
+}
+
+function initStoredProfilePhoto() {
+    if (!userRole) return;
+
+    const storedPhoto = readStorage(getPhotoStorageKey(userRole));
+    if (storedPhoto) applyProfilePhoto(storedPhoto);
+}
+
 initLayoutControls();
 initToastTriggers();
 initDefaultUserIdAutofill();
@@ -1650,3 +2076,5 @@ initRequestForm();
 initRequestWorkspace();
 initAppearanceEditor();
 initFlashMessage();
+initStoredProfilePhoto();
+initProfileSettings();

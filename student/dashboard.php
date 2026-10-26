@@ -64,6 +64,7 @@ $studentDetailFieldByLabel = [
                 </div>
             <?php endforeach ?>
             <small class="text-muted">Read from the university system.</small>
+            <a class="link-accent" href="profile.php">Manage profile</a>
         </div>
         <div class="panel">
             <h3>Pickup hours</h3>
