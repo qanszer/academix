@@ -127,6 +127,7 @@ $releasedThisTermLabel = number_format(REQUESTS_RELEASED_THIS_TERM);
                 <h3><span class="step-badge">3</span>Files</h3>
                 <div id="upload-area">
                     <p class="field-hint" id="upload-hint"></p>
+                    <p class="field-hint">Selected files are only previewed in this form; they aren't saved with your request.</p>
                     <input class="visually-hidden" id="file-input" type="file"
                         accept=".pdf,.jpg,.jpeg,.png" tabindex="-1" multiple>
                     <div class="file-grid" id="file-grid">

@@ -43,23 +43,14 @@ const PAYMENT_STATUS = Object.freeze({
 
 const REQUEST_PROGRESS_STEPS = [
     STATUS.SUBMITTED,
-    STATUS.UNDER_REVIEW,
     STATUS.PROCESSING,
-    STATUS.APPROVED_CLEARED,
     STATUS.READY_FOR_RELEASE,
     STATUS.COMPLETED,
 ];
 
 const ALLOWED_STATUS_TRANSITIONS = {
-    [STATUS.SUBMITTED]: [STATUS.UNDER_REVIEW],
-    [STATUS.UNDER_REVIEW]: [
-        STATUS.PROCESSING,
-        STATUS.NEEDS_CORRECTION,
-        STATUS.REJECTED,
-    ],
-    [STATUS.NEEDS_CORRECTION]: [STATUS.UNDER_REVIEW],
-    [STATUS.PROCESSING]: [STATUS.APPROVED_CLEARED],
-    [STATUS.APPROVED_CLEARED]: [STATUS.READY_FOR_RELEASE],
+    [STATUS.SUBMITTED]: [STATUS.PROCESSING, STATUS.REJECTED],
+    [STATUS.PROCESSING]: [STATUS.READY_FOR_RELEASE, STATUS.REJECTED],
     [STATUS.READY_FOR_RELEASE]: [STATUS.COMPLETED],
 };
 
@@ -905,11 +896,27 @@ function initRequestForm() {
         }
 
         submitButton.disabled = true;
-        showToast("Request submitted");
-        setTimeout(
-            () => (location.href = "my-requests.php"),
-            REDIRECT_DELAY_MS,
-        );
+        fetch(new URL("submit-request.php", window.location.href), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                documentType: selectedDocument.label,
+                description: otherDocumentInput.value.trim(),
+                quantity: getCopies(),
+                purpose: purposeInput.value.trim(),
+                notes: selectOne("#notes-input").value.trim(),
+            }),
+        })
+            .then(async (response) => {
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || "Could not save request.");
+                showToast("Request submitted");
+                setTimeout(() => (location.href = "my-requests.php"), REDIRECT_DELAY_MS);
+            })
+            .catch((error) => {
+                submitButton.disabled = false;
+                showToast(error.message);
+            });
     });
 
     updateFee();
@@ -1154,6 +1161,16 @@ function renderRequirementRow(requirement) {
 }
 
 function renderRequirements(request) {
+    if (!request.requirements.length) {
+        return `
+            <div>
+                <div class="detail-section-heading">
+                    <h3 class="detail-section-title">Requirements</h3>
+                </div>
+                <p class="text-muted">Requirement tracking isn't saved yet.</p>
+            </div>`;
+    }
+
     const isPending = (requirement) =>
         requirement.status !== REQUIREMENT_STATUS.RECEIVED;
     const pendingCount = request.requirements.filter(isPending).length;
@@ -1220,6 +1237,7 @@ function renderAttachedFiles(request) {
                 ${files.map(renderFileTile).join("")}
                 ${canAddFiles ? renderAddFileTile() : ""}
             </div>
+            <p class="field-hint">Files selected here are temporary and aren't saved with the request.</p>
         </section>`;
 }
 
@@ -1227,6 +1245,7 @@ function renderStaffControls(request) {
     return `
         <section class="detail-section">
             <h3 class="detail-section-title">Clearance and release</h3>
+            <p class="field-hint">These clearance, payment, and release controls are temporary and aren't saved.</p>
             <div class="staff-controls">
                 <label>Blocking issue
                     <select class="form-control"
@@ -1266,6 +1285,7 @@ function renderComposer() {
         <div class="composer">
             <textarea id="message-input" rows="2"
                 placeholder="${placeholder}"></textarea>
+            <p class="field-hint">Messages and uploads are temporary and aren't saved.</p>
             <div class="composer-footer">
                 <button class="button button-secondary"
                     data-toast-message="${FILE_PICKER_MESSAGE}">
@@ -1309,13 +1329,6 @@ function renderStudentActions(request) {
             true,
         );
     }
-    if (request.status === STATUS.SUBMITTED) {
-        return renderActionButton(
-            "Cancel request",
-            `data-action="change-status" data-status="${STATUS.CANCELLED}"`,
-            false,
-        );
-    }
     return "";
 }
 
@@ -1324,34 +1337,28 @@ function renderStatusActions(request) {
 
     const transitions = ALLOWED_STATUS_TRANSITIONS[request.status] || [];
 
-    // The first transition is the normal next step and is the primary
-    // button. The rest are exceptions. Reversed so the primary sits last.
+    // The first transition is the normal next step and is the primary button.
     return transitions
         .map((newStatus, index) => {
-            const isStartingReview =
-                request.status === STATUS.SUBMITTED &&
-                newStatus === STATUS.UNDER_REVIEW;
             return renderActionButton(
-                isStartingReview ? "Start review" : newStatus,
+                newStatus,
                 `data-action="change-status" data-status="${newStatus}"`,
                 index === 0,
             );
         })
-        .reverse()
         .join("");
 }
 
 function renderActionBar(request) {
     const actions = renderStatusActions(request);
-    const remarkInput =
+    const persistenceNote =
         isStaffView && actions
-            ? `<input class="form-control action-remark" id="remark-input"
-                placeholder="Remark for the student, optional">`
+            ? `<p class="field-hint">Status changes are saved. Staff remarks aren't saved yet.</p>`
             : "";
 
     return `
         <div class="action-bar">
-            ${remarkInput}
+            ${persistenceNote}
             <div class="action-total">
                 <span class="action-total-amount">
                     ${formatFee(request.fee)}
@@ -1385,17 +1392,25 @@ function readInputValue(selector) {
     return input ? input.value.trim() : "";
 }
 
-function changeStatus(newStatus) {
-    const blockingIssue = selectedRequest.blockingIssue || "";
-
-    if (newStatus === STATUS.APPROVED_CLEARED && blockingIssue) {
-        showToast(`Cannot clear: ${blockingIssue}`);
-        return;
+async function changeStatus(newStatus) {
+    if (isStaffView) {
+        try {
+            const response = await fetch("update-request.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ requestId: selectedRequest.requestId, status: newStatus }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                showToast(result.error || "Could not update status.");
+                return;
+            }
+            newStatus = result.status;
+        } catch {
+            showToast("Could not reach the server. Try again.");
+            return;
+        }
     }
-
-    const remarkText = readInputValue("#remark-input") || blockingIssue;
-    if (remarkText) addMessage(remarkText);
-
     selectedRequest.status = newStatus;
     updateReleaseStatusFor(newStatus);
     syncSelectedListItem();
@@ -1413,7 +1428,7 @@ function sendMessage() {
     addMessage(messageText);
     syncSelectedListItem();
     renderSelectedRequest();
-    showToast("Message sent");
+    showToast("Message shown for this session only; it isn't saved.");
 }
 
 function renderSelectedRequest() {
