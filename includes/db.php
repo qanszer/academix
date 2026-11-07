@@ -2,7 +2,7 @@
 $host = 'localhost';
 $dbname = 'academix_db';
 $username = 'root';
-$password = ''; // Default XAMPP password is usually blank
+$password = ''; 
 
 try {
     $pdo = new PDO(
@@ -20,7 +20,7 @@ try {
     exit('Database connection failed. Please try again later.');
 }
 
-/** Return a database-backed request in the shape consumed by app.js. */
+ 
 function mapDatabaseRequest(array $row): array
 {
     $statusMap = [
