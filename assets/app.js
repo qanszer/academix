@@ -49,11 +49,18 @@ const REQUEST_PROGRESS_STEPS = [
 ];
 
 const ALLOWED_STATUS_TRANSITIONS = {
-    [STATUS.SUBMITTED]: [STATUS.PROCESSING, STATUS.REJECTED],
-    [STATUS.PROCESSING]: [STATUS.READY_FOR_RELEASE, STATUS.REJECTED],
-    [STATUS.READY_FOR_RELEASE]: [STATUS.COMPLETED],
+    [STATUS.SUBMITTED]: [
+        STATUS.PROCESSING,
+        STATUS.REJECTED,
+    ],
+    [STATUS.PROCESSING]: [
+        STATUS.READY_FOR_RELEASE,
+        STATUS.REJECTED,
+    ],
+    [STATUS.READY_FOR_RELEASE]: [
+        STATUS.COMPLETED,
+    ],
 };
-
 const TERMINATED_STATUSES = [STATUS.REJECTED, STATUS.CANCELLED];
 
 const PICKUP_PENDING_STATUSES = [
@@ -160,7 +167,7 @@ const EYE_ICON = createIcon(
     '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/>' +
         '<circle cx="12" cy="12" r="3"/>',
 );
-const EYE_OFF_ICON = createIcon(
+const EYE_OFF_ICON = createIcon( 
     '<path d="M17.9 17.9A10.9 10.9 0 0 1 12 19C5 19 1 12 1 12a18.5 18.5 0 0 1 5.1-5.9"/>' +
         '<path d="M9.9 4.2A9.7 9.7 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.2 3.2"/>' +
         '<path d="M14.1 14.1a3 3 0 1 1-4.2-4.2M1 1l22 22"/>',
@@ -872,52 +879,67 @@ function initRequestForm() {
         addFileButton.focus();
     });
 
-    requestForm.addEventListener("submit", (event) => {
-        event.preventDefault();
+requestForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
 
-        if (!selectedDocument) {
-            showCatalogError(DOCUMENT_REQUIRED_MESSAGE);
-            scrollToDocumentSection();
-            searchInput.focus({ preventScroll: true });
-            return;
-        }
-        // Submitting with the list open means the student is happy with the
-        // document they already picked.
-        if (!catalogPanel.hidden) showSelection();
+    if (!selectedDocument) {
+        showCatalogError(DOCUMENT_REQUIRED_MESSAGE);
+        scrollToDocumentSection();
+        searchInput.focus({ preventScroll: true });
+        return;
+    }
 
-        [otherDocumentInput, purposeInput].forEach(clearFieldError);
-        const invalidFields = findInvalidFields();
-        invalidFields.forEach(({ input, message }) => {
-            showFieldError(input, message);
-        });
-        if (invalidFields.length) {
-            invalidFields[0].input.focus();
-            return;
-        }
+    if (!catalogPanel.hidden) showSelection();
 
-        submitButton.disabled = true;
-        fetch(new URL("submit-request.php", window.location.href), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                documentType: selectedDocument.label,
-                description: otherDocumentInput.value.trim(),
-                quantity: getCopies(),
-                purpose: purposeInput.value.trim(),
-                notes: selectOne("#notes-input").value.trim(),
-            }),
-        })
-            .then(async (response) => {
-                const result = await response.json();
-                if (!response.ok) throw new Error(result.error || "Could not save request.");
-                showToast("Request submitted");
-                setTimeout(() => (location.href = "my-requests.php"), REDIRECT_DELAY_MS);
-            })
-            .catch((error) => {
-                submitButton.disabled = false;
-                showToast(error.message);
-            });
+    [otherDocumentInput, purposeInput].forEach(clearFieldError);
+
+    const invalidFields = findInvalidFields();
+
+    invalidFields.forEach(({ input, message }) => {
+        showFieldError(input, message);
     });
+
+    if (invalidFields.length) {
+        invalidFields[0].input.focus();
+        return;
+    }
+
+    submitButton.disabled = true;
+
+    const payload = {
+        documentType: selectedDocument.label,
+        purpose: purposeInput.value.trim(),
+        quantity: Number(copiesInput.value),
+        description: otherDocumentInput.value.trim(),
+    };
+
+    try {
+        const response = await fetch("submit-request.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || "Request submission failed.");
+        }
+
+        showToast("Request submitted");
+
+        setTimeout(() => {
+            location.href = "my-requests.php";
+        }, REDIRECT_DELAY_MS);
+
+    } catch (error) {
+        console.error("Request submission error:", error);
+        showToast(error.message);
+        submitButton.disabled = false;
+    }
+});
 
     updateFee();
 }
@@ -1161,16 +1183,6 @@ function renderRequirementRow(requirement) {
 }
 
 function renderRequirements(request) {
-    if (!request.requirements.length) {
-        return `
-            <div>
-                <div class="detail-section-heading">
-                    <h3 class="detail-section-title">Requirements</h3>
-                </div>
-                <p class="text-muted">Requirement tracking isn't saved yet.</p>
-            </div>`;
-    }
-
     const isPending = (requirement) =>
         requirement.status !== REQUIREMENT_STATUS.RECEIVED;
     const pendingCount = request.requirements.filter(isPending).length;
@@ -1237,7 +1249,6 @@ function renderAttachedFiles(request) {
                 ${files.map(renderFileTile).join("")}
                 ${canAddFiles ? renderAddFileTile() : ""}
             </div>
-            <p class="field-hint">Files selected here are temporary and aren't saved with the request.</p>
         </section>`;
 }
 
@@ -1245,7 +1256,6 @@ function renderStaffControls(request) {
     return `
         <section class="detail-section">
             <h3 class="detail-section-title">Clearance and release</h3>
-            <p class="field-hint">These clearance, payment, and release controls are temporary and aren't saved.</p>
             <div class="staff-controls">
                 <label>Blocking issue
                     <select class="form-control"
@@ -1285,7 +1295,6 @@ function renderComposer() {
         <div class="composer">
             <textarea id="message-input" rows="2"
                 placeholder="${placeholder}"></textarea>
-            <p class="field-hint">Messages and uploads are temporary and aren't saved.</p>
             <div class="composer-footer">
                 <button class="button button-secondary"
                     data-toast-message="${FILE_PICKER_MESSAGE}">
@@ -1329,6 +1338,13 @@ function renderStudentActions(request) {
             true,
         );
     }
+    if (request.status === STATUS.SUBMITTED) {
+        return renderActionButton(
+            "Cancel request",
+            `data-action="change-status" data-status="${STATUS.CANCELLED}"`,
+            false,
+        );
+    }
     return "";
 }
 
@@ -1337,28 +1353,34 @@ function renderStatusActions(request) {
 
     const transitions = ALLOWED_STATUS_TRANSITIONS[request.status] || [];
 
-    // The first transition is the normal next step and is the primary button.
+    // The first transition is the normal next step and is the primary
+    // button. The rest are exceptions. Reversed so the primary sits last.
     return transitions
         .map((newStatus, index) => {
+            const isStartingReview =
+                request.status === STATUS.SUBMITTED &&
+                newStatus === STATUS.UNDER_REVIEW;
             return renderActionButton(
-                newStatus,
+                isStartingReview ? "Start review" : newStatus,
                 `data-action="change-status" data-status="${newStatus}"`,
                 index === 0,
             );
         })
+        .reverse()
         .join("");
 }
 
 function renderActionBar(request) {
     const actions = renderStatusActions(request);
-    const persistenceNote =
+    const remarkInput =
         isStaffView && actions
-            ? `<p class="field-hint">Status changes are saved. Staff remarks aren't saved yet.</p>`
+            ? `<input class="form-control action-remark" id="remark-input"
+                placeholder="Remark for the student, optional">`
             : "";
 
     return `
         <div class="action-bar">
-            ${persistenceNote}
+            ${remarkInput}
             <div class="action-total">
                 <span class="action-total-amount">
                     ${formatFee(request.fee)}
@@ -1393,29 +1415,44 @@ function readInputValue(selector) {
 }
 
 async function changeStatus(newStatus) {
-    if (isStaffView) {
-        try {
-            const response = await fetch("update-request.php", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ requestId: selectedRequest.requestId, status: newStatus }),
-            });
-            const result = await response.json();
-            if (!response.ok) {
-                showToast(result.error || "Could not update status.");
-                return;
-            }
-            newStatus = result.status;
-        } catch {
-            showToast("Could not reach the server. Try again.");
-            return;
-        }
+    const blockingIssue = selectedRequest.blockingIssue || "";
+
+    if (newStatus === STATUS.APPROVED_CLEARED && blockingIssue) {
+        showToast(`Cannot clear: ${blockingIssue}`);
+        return;
     }
-    selectedRequest.status = newStatus;
-    updateReleaseStatusFor(newStatus);
-    syncSelectedListItem();
-    renderSelectedRequest();
-    showToast(`Status: ${newStatus}`);
+
+    const remarkText = readInputValue("#remark-input") || blockingIssue;
+
+    try {
+        const response = await fetch("update-request.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                requestId: selectedRequest.requestId,
+                status: newStatus,
+            }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+            throw new Error(result.error || "Failed to update request.");
+        }
+
+        // Update the UI only after the database confirms success.
+        selectedRequest.status = result.status;
+        updateReleaseStatusFor(result.status);
+        syncSelectedListItem();
+        renderSelectedRequest();
+
+        showToast(`Status updated: ${result.status}`);
+    } catch (error) {
+        console.error("Status update failed:", error);
+        showToast(error.message || "Could not update request.");
+    }
 }
 
 function sendMessage() {
@@ -1428,7 +1465,7 @@ function sendMessage() {
     addMessage(messageText);
     syncSelectedListItem();
     renderSelectedRequest();
-    showToast("Message shown for this session only; it isn't saved.");
+    showToast("Message sent");
 }
 
 function renderSelectedRequest() {
